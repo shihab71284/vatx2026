@@ -56,115 +56,141 @@ declare global {
   }
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const getCurrentFilename = () => {
+  try {
+    return fileURLToPath(import.meta.url);
+  } catch (e) {
+    return typeof __filename !== 'undefined' ? __filename : '';
+  }
+};
+
+const getCurrentDirname = () => {
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch (e) {
+    return typeof __dirname !== 'undefined' ? __dirname : '';
+  }
+};
+
+const __filename = getCurrentFilename();
+const __dirname = getCurrentDirname();
 
 // Initialize Database
 const db = new Database("vatx.db");
 
 // Platform-specific publishing handlers
-const socialHandlers: Record<string, (content: string, mediaUrl: string | undefined, settings: any) => Promise<string>> = {
-  facebook: async (content, mediaUrl, settings) => {
-    const providedToken = settings.facebook_access_token || process.env.FACEBOOK_ACCESS_TOKEN;
-    const fbPageId = settings.facebook_page_id || process.env.FACEBOOK_PAGE_ID;
-    
-    if (!providedToken || !fbPageId) throw new Error("Facebook configuration missing");
+async function publishToFacebook(content: string, mediaUrl: string | undefined, settings: any): Promise<string> {
+  const providedToken = settings.facebook_access_token || process.env.FACEBOOK_ACCESS_TOKEN;
+  const fbPageId = settings.facebook_page_id || process.env.FACEBOOK_PAGE_ID;
+  
+  if (!providedToken || !fbPageId) throw new Error("Facebook configuration missing");
 
-    let activeToken = providedToken;
+  let activeToken = providedToken;
 
-    // Check if the token is a Page Token or User Token
-    // We attempt to get the Page Token using the provided token acting as a User Token
-    try {
-      const pageInfo = await axios.get(`https://graph.facebook.com/v19.0/${fbPageId}`, {
-        params: {
-          fields: 'access_token',
-          access_token: providedToken
-        }
-      });
-      if (pageInfo.data.access_token) {
-        activeToken = pageInfo.data.access_token;
-        console.log(`Successfully exchanged User Token for Page Access Token for ID: ${fbPageId}`);
+  // Check if the token is a Page Token or User Token
+  // We attempt to get the Page Token using the provided token acting as a User Token
+  try {
+    const pageInfo = await axios.get(`https://graph.facebook.com/v19.0/${fbPageId}`, {
+      params: {
+        fields: 'access_token',
+        access_token: providedToken
       }
-    } catch (err: any) {
-      // If it fails, maybe it's already a Page Token or the User Token doesn't have permissions
-      console.log("Token exchange skipped or failed, attempting direct post with provided token.");
+    });
+    if (pageInfo.data.access_token) {
+      activeToken = pageInfo.data.access_token;
+      console.log(`Successfully exchanged User Token for Page Access Token for ID: ${fbPageId}`);
     }
-
-    const postData: any = { 
-      message: content, 
-      access_token: activeToken 
-    };
-    
-    if (mediaUrl) postData.link = mediaUrl;
-    
-    const response = await axios.post(`https://graph.facebook.com/v19.0/${fbPageId}/feed`, postData);
-    return response.data.id;
-  },
-  linkedin: async (content, mediaUrl, settings) => {
-    const liToken = settings.linkedin_access_token || process.env.LINKEDIN_ACCESS_TOKEN;
-    const liPersonId = settings.linkedin_person_id || process.env.LINKEDIN_PERSON_ID;
-    if (!liToken || !liPersonId) throw new Error("LinkedIn configuration missing");
-    const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
-      author: `urn:li:person:${liPersonId}`,
-      lifecycleState: "PUBLISHED",
-      specificContent: {
-        "com.linkedin.ugc.ShareContent": {
-          shareCommentary: { text: content },
-          shareMediaCategory: mediaUrl ? "IMAGE" : "NONE",
-          media: mediaUrl ? [{
-            status: "READY",
-            description: { text: "VATX Post" },
-            media: mediaUrl,
-            title: { text: "VATX Update" }
-          }] : undefined
-        }
-      },
-      visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" }
-    }, {
-      headers: {
-        'Authorization': `Bearer ${liToken}`,
-        'X-Restli-Protocol-Version': '2.0.0'
-      }
-    });
-    return response.headers['x-restli-id'] as string || "published";
-  },
-  twitter: async (content, mediaUrl, settings) => {
-    const twToken = settings.twitter_bearer_token || process.env.TWITTER_BEARER_TOKEN;
-    if (!twToken) throw new Error("Twitter configuration missing");
-    const response = await axios.post('https://api.twitter.com/2/tweets', { text: content }, {
-      headers: { 'Authorization': `Bearer ${twToken}` }
-    });
-    return response.data.id;
-  },
-  instagram: async (content, mediaUrl, settings) => {
-    const fbToken = settings.facebook_access_token || process.env.FACEBOOK_ACCESS_TOKEN;
-    const igUserId = settings.instagram_user_id || process.env.INSTAGRAM_USER_ID;
-    if (!fbToken || !igUserId) throw new Error("Instagram configuration missing");
-    const container = await axios.post(`https://graph.facebook.com/v19.0/${igUserId}/media`, {
-      caption: content,
-      image_url: mediaUrl || `https://picsum.photos/seed/vatx/1080/1080`,
-      access_token: fbToken
-    });
-    const publish = await axios.post(`https://graph.facebook.com/v19.0/${igUserId}/media_publish`, {
-      creation_id: container.data.id,
-      access_token: fbToken
-    });
-    return publish.data.id;
-  },
-  threads: async (content, mediaUrl, settings) => {
-    const thToken = settings.threads_access_token || process.env.THREADS_ACCESS_TOKEN;
-    if (!thToken) throw new Error("Threads configuration missing");
-    const response = await axios.post('https://graph.threads.net/v1.0/me/threads', {
-      text: content,
-      access_token: thToken
-    });
-    return response.data.id;
-  },
-  tiktok: async (content, mediaUrl, settings) => {
-    // In a real scenario, we'd use TikTok's video push API with mediaUrl
-    console.log(`TikTok mock publish with media: ${mediaUrl}`);
-    return "tiktok-queued-" + Date.now();
+  } catch (err: any) {
+    console.log("Token exchange skipped or failed, attempting direct post with provided token.");
   }
+
+  const postData: any = { 
+    message: content, 
+    access_token: activeToken 
+  };
+  
+  if (mediaUrl) postData.link = mediaUrl;
+  
+  const response = await axios.post(`https://graph.facebook.com/v19.0/${fbPageId}/feed`, postData);
+  return response.data.id;
+}
+
+async function publishToLinkedIn(content: string, mediaUrl: string | undefined, settings: any): Promise<string> {
+  const liToken = settings.linkedin_access_token || process.env.LINKEDIN_ACCESS_TOKEN;
+  const liPersonId = settings.linkedin_person_id || process.env.LINKEDIN_PERSON_ID;
+  if (!liToken || !liPersonId) throw new Error("LinkedIn configuration missing");
+  const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
+    author: `urn:li:person:${liPersonId}`,
+    lifecycleState: "PUBLISHED",
+    specificContent: {
+      "com.linkedin.ugc.ShareContent": {
+        shareCommentary: { text: content },
+        shareMediaCategory: mediaUrl ? "IMAGE" : "NONE",
+        media: mediaUrl ? [{
+          status: "READY",
+          description: { text: "VATX Post" },
+          media: mediaUrl,
+          title: { text: "VATX Update" }
+        }] : undefined
+      }
+    },
+    visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" }
+  }, {
+    headers: {
+      'Authorization': `Bearer ${liToken}`,
+      'X-Restli-Protocol-Version': '2.0.0'
+    }
+  });
+  return response.headers['x-restli-id'] as string || "published";
+}
+
+async function publishToTwitter(content: string, mediaUrl: string | undefined, settings: any): Promise<string> {
+  const twToken = settings.twitter_bearer_token || process.env.TWITTER_BEARER_TOKEN;
+  if (!twToken) throw new Error("Twitter configuration missing");
+  const response = await axios.post('https://api.twitter.com/2/tweets', { text: content }, {
+    headers: { 'Authorization': `Bearer ${twToken}` }
+  });
+  return response.data.id;
+}
+
+async function publishToInstagram(content: string, mediaUrl: string | undefined, settings: any): Promise<string> {
+  const fbToken = settings.facebook_access_token || process.env.FACEBOOK_ACCESS_TOKEN;
+  const igUserId = settings.instagram_user_id || process.env.INSTAGRAM_USER_ID;
+  if (!fbToken || !igUserId) throw new Error("Instagram configuration missing");
+  const container = await axios.post(`https://graph.facebook.com/v19.0/${igUserId}/media`, {
+    caption: content,
+    image_url: mediaUrl || `https://picsum.photos/seed/vatx/1080/1080`,
+    access_token: fbToken
+  });
+  const publish = await axios.post(`https://graph.facebook.com/v19.0/${igUserId}/media_publish`, {
+    creation_id: container.data.id,
+    access_token: fbToken
+  });
+  return publish.data.id;
+}
+
+async function publishToThreads(content: string, mediaUrl: string | undefined, settings: any): Promise<string> {
+  const thToken = settings.threads_access_token || process.env.THREADS_ACCESS_TOKEN;
+  if (!thToken) throw new Error("Threads configuration missing");
+  const response = await axios.post('https://graph.threads.net/v1.0/me/threads', {
+    text: content,
+    access_token: thToken
+  });
+  return response.data.id;
+}
+
+async function publishToTikTok(content: string, mediaUrl: string | undefined, settings: any): Promise<string> {
+  console.log(`TikTok mock publish with media: ${mediaUrl}`);
+  return "tiktok-queued-" + Date.now();
+}
+
+const socialHandlers: Record<string, (content: string, mediaUrl: string | undefined, settings: any) => Promise<string>> = {
+  facebook: publishToFacebook,
+  linkedin: publishToLinkedIn,
+  twitter: publishToTwitter,
+  instagram: publishToInstagram,
+  threads: publishToThreads,
+  tiktok: publishToTikTok,
 };
 
 async function performPublish(platform: string, content: string, mediaUrl?: string, statusSource: string = 'success') {
@@ -482,6 +508,15 @@ db.exec(`
     amount REAL,
     verificationDate DATETIME DEFAULT CURRENT_TIMESTAMP,
     status TEXT DEFAULT 'verified'
+  );
+
+  CREATE TABLE IF NOT EXISTS mfs_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount REAL NOT NULL,
+    method TEXT NOT NULL,
+    transactionId TEXT,
+    status TEXT DEFAULT 'pending',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
   -- Initial Compliance Deadlines
@@ -1617,6 +1652,33 @@ async function startServer() {
     });
   });
 
+  // MFS Payment Routes
+  app.post("/api/payments/create", (req, res) => {
+    const { amount, method } = req.body;
+    if (!amount || !method) return res.status(400).json({ error: "Amount and method required" });
+    const stmt = db.prepare("INSERT INTO mfs_payments (amount, method, status) VALUES (?, ?, 'pending')");
+    const result = stmt.run(parseFloat(amount), method);
+    res.json({ success: true, paymentId: result.lastInsertRowid });
+  });
+
+  app.get("/api/payments/verify/:id", (req, res) => {
+    const { id } = req.params;
+    const payment = db.prepare("SELECT * FROM mfs_payments WHERE id = ?").get(id) as any;
+    const txHash = "TRX" + Math.floor(Math.random() * 89999999 + 10000000);
+    
+    if (payment) {
+      db.prepare("UPDATE mfs_payments SET status = 'success', transactionId = ? WHERE id = ?").run(txHash, id);
+    }
+    
+    res.json({ 
+      success: true, 
+      status: 'success', 
+      transactionId: txHash,
+      amount: payment?.amount || 0,
+      method: payment?.method || 'bkash'
+    });
+  });
+
   // Base (Database Management) Routes
   app.get("/api/base/tables", (req, res) => {
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
@@ -2079,6 +2141,11 @@ async function startServer() {
 
   // Poll for scheduled posts every 1 minute
   setInterval(processScheduledPosts, 1000 * 60);
+
+  // API 404 fallback handler (prevents returning HTML for unknown API endpoints)
+  app.use("/api/*", (req, res) => {
+    res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

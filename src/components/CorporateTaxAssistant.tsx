@@ -151,12 +151,13 @@ export default function CorporateTaxAssistant({ t }: { t: any }) {
           {
             parts: [
               { text: `Extract corporate tax return data from this document for Bangladesh NBR system. 
-                Target Financial Year: ${selectedFinancialYear}.
+                Target Financial Year: ${selectedFinancialYear} (Finance Bill 2026-27 / আয়কর পরিপত্র ২৬-২৭, ও আয়কর নির্দেশিকা ২৬-২৭).
                 
-                CRITICAL: Every field identified must strictly match the NBR standard corporate tax return categories. Do not invent new labels. Map data precisely into the structured schema provided.
-                
-                Look for audited financial statements, tax computation sheets, or previous returns. 
-                Detect English and Bengali. Normalize values to BDT.` },
+                CRITICAL COMPLIANCE RULES:
+                - Every field identified must strictly match the NBR standard corporate tax return categories under Income Tax Act 2023 and Finance Bill 26-27 guidelines.
+                - Preserve exact 1:1 official field structure with zero arbitrary modifications.
+                - Look for audited financial statements, tax computation sheets, or previous returns. 
+                - Detect English and Bengali text accurately. Normalize all values to BDT.` },
               { inlineData: { data: base64Data, mimeType: file.type } }
             ]
           }

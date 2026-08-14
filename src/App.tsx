@@ -8536,6 +8536,7 @@ function IncomeTaxAdvisory() {
 
 function FinalTaxCalculator() {
   const [inputs, setInputs] = useState({
+    taxYear: '2026-27',
     category: 'general',
     location: 'dhaka-ctg',
     salaryIncome: '',
@@ -8561,7 +8562,8 @@ function FinalTaxCalculator() {
         model: "gemini-3-flash-preview",
         contents: [{
           parts: [{
-            text: `As a Bangladeshi Tax Expert, analyze this tax calculation for FY 2025-26 and provide advice in Bangla. 
+            text: `As a Bangladeshi Tax Expert, analyze this tax calculation based on Finance Bill 2026-27 (আয়কর পরিপত্র ২৬-২৭, ও আয়কর নির্দেশিকা ২৬-২৭) and provide advice in Bangla. 
+            Assessment Year: ${inputs.taxYear}
             Detailed Income Breakdown:
             - Salary: ${inputs.salaryIncome} BDT
             - Business: ${inputs.businessIncome} BDT (Expenses: ${inputs.businessExpenses} BDT)
@@ -8581,9 +8583,9 @@ function FinalTaxCalculator() {
             - Total Payable: ${taxData.totalPayable} BDT
             
             Please provide:
-            1. A summary of the tax liability.
+            1. A summary of the tax liability under Finance Bill 26-27.
             2. Suggestions for further tax savings if possible.
-            3. Any specific compliance notes based on the Income Tax Act 2023.`
+            3. Specific compliance notes based on Income Tax Circular 26-27 and Income Tax Act 2023.`
           }]
         }]
       });
@@ -8612,23 +8614,23 @@ function FinalTaxCalculator() {
     const investment = parseFloat(inputs.investment) || 0;
     const wealth = parseFloat(inputs.netWealth) || 0;
 
-    // 1. Determine Threshold (2025-26)
+    // 1. Determine Exemption Threshold (Finance Bill 26-27 / পরিপত্র ২৬-২৭)
     let threshold = 375000;
     if (inputs.category === 'female-senior') threshold = 425000;
     if (inputs.category === 'disabled') threshold = 500000;
     if (inputs.category === 'veteran') threshold = 525000;
 
-    // 2. Calculate Gross Tax based on Slabs
+    // 2. Calculate Gross Tax based on Finance Bill 26-27 Slabs
     let tax = 0;
     let remaining = income;
 
     const slabs = [
       { limit: threshold, rate: 0 },
-      { limit: 300000, rate: 0.10 },
-      { limit: 400000, rate: 0.15 },
+      { limit: 100000, rate: 0.05 },
+      { limit: 400000, rate: 0.10 },
+      { limit: 500000, rate: 0.15 },
       { limit: 500000, rate: 0.20 },
-      { limit: 2000000, rate: 0.25 },
-      { limit: Infinity, rate: 0.30 }
+      { limit: Infinity, rate: 0.25 }
     ];
 
     for (const slab of slabs) {
@@ -8638,7 +8640,7 @@ function FinalTaxCalculator() {
       remaining -= taxableInSlab;
     }
 
-    // 3. Calculate Rebate (Circular Page 60)
+    // 3. Calculate Rebate (Circular 26-27 Page 60)
     // Rebate = 15% of investment, limited by 3% of total income or 10L
     const rebateLimit1 = income * 0.03;
     const rebateLimit2 = investment * 0.15;
@@ -8647,7 +8649,7 @@ function FinalTaxCalculator() {
 
     let netTax = Math.max(0, tax - rebate);
 
-    // 4. Minimum Tax
+    // 4. Minimum Tax (NBR City Corp Rules)
     let minTax = 3000;
     if (inputs.location === 'dhaka-ctg') minTax = 5000;
     if (inputs.location === 'other-city') minTax = 4000;
@@ -8656,7 +8658,7 @@ function FinalTaxCalculator() {
       netTax = minTax;
     }
 
-    // 5. Surcharge (Circular Page 68)
+    // 5. Surcharge (Finance Bill 26-27 Net Wealth Rules)
     let surcharge = 0;
     if (wealth > 40000000) { // > 4 Crore
       if (wealth <= 100000000) surcharge = netTax * 0.10;
