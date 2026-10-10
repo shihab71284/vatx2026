@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleGenAI, Modality, LiveServerMessage } from "@google/genai";
-import { Mic, MicOff, Volume2, VolumeX, Loader2, MessageSquare, Bot, AlertCircle, X } from 'lucide-react';
+import { Mic, MicOff, Volume2, Loader2, MessageSquare, Bot, AlertCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface LiveAgentProps {
@@ -15,176 +14,122 @@ export default function LiveAgent({ onClose }: LiveAgentProps) {
   const [error, setError] = useState<string | null>(null);
   const [volume, setVolume] = useState(0);
 
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const sessionRef = useRef<any>(null);
-  const audioQueueRef = useRef<Int16Array[]>([]);
-  const isPlayingRef = useRef(false);
-  const nextStartTimeRef = useRef(0);
-
-  const SAMPLE_RATE = 16000;
+  const recognitionRef = useRef<any>(null);
+  const isMutedRef = useRef(false);
+  isMutedRef.current = isMuted;
 
   const stopSession = useCallback(() => {
-    if (sessionRef.current) {
-      sessionRef.current.close();
-      sessionRef.current = null;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+      recognitionRef.current = null;
     }
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
     }
     setIsConnected(false);
     setIsConnecting(false);
     setVolume(0);
   }, []);
 
+  const speakText = (text: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window) || isMutedRef.current) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.onstart = () => setVolume(0.8);
+    utterance.onend = () => setVolume(0);
+    utterance.onerror = () => setVolume(0);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleUserSpeech = async (speechText: string) => {
+    if (!speechText.trim()) return;
+    setTranscription(prev => ({ ...prev, user: speechText }));
+    setVolume(0.5);
+
+    try {
+      const res = await fetch('/api/gemini/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: speechText,
+          systemInstruction: "You are an intelligent, friendly voice assistant for VATX.BD (Tax, VAT, and business consultant in Bangladesh). Keep spoken answers concise, informative, and conversational (under 3 sentences)."
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const reply = data.text || "I understood your query. How else can I assist with your tax and VAT needs?";
+      setTranscription(prev => ({ ...prev, model: reply }));
+      speakText(reply);
+    } catch (err: any) {
+      console.error("Voice AI error:", err);
+      const fallback = "I'm having trouble processing that right now. Please try asking again.";
+      setTranscription(prev => ({ ...prev, model: fallback }));
+      speakText(fallback);
+    }
+  };
+
   const startSession = async () => {
     setIsConnecting(true);
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      audioContextRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
-      streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      const source = audioContextRef.current.createMediaStreamSource(streamRef.current);
-      processorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        throw new Error("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
+      }
 
-      const session = await ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
-          },
-          systemInstruction: "You are a helpful and friendly real-time assistant. Keep your responses concise and conversational.",
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-        },
-        callbacks: {
-          onopen: () => {
-            setIsConnected(true);
-            setIsConnecting(false);
-            
-            processorRef.current?.addEventListener('audioprocess', (e) => {
-              if (isMuted) return;
-              
-              const inputData = e.inputBuffer.getChannelData(0);
-              // Convert Float32 to Int16
-              const pcmData = new Int16Array(inputData.length);
-              let sum = 0;
-              for (let i = 0; i < inputData.length; i++) {
-                const s = Math.max(-1, Math.min(1, inputData[i]));
-                pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-                sum += Math.abs(inputData[i]);
-              }
-              setVolume(sum / inputData.length);
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
 
-              // Convert to base64
-              const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
-              session.sendRealtimeInput({
-                audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-              });
-            });
+      recognition.onstart = () => {
+        setIsConnected(true);
+        setIsConnecting(false);
+        const welcome = "Hello! I am your VATX live AI consultant. Ask me any tax or VAT question.";
+        setTranscription({ model: welcome });
+        speakText(welcome);
+      };
 
-            source.connect(processorRef.current!);
-            processorRef.current!.connect(audioContextRef.current!.destination);
-          },
-          onmessage: async (message: LiveServerMessage) => {
-            // Handle audio output
-            const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (base64Audio) {
-              const binary = atob(base64Audio);
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) {
-                bytes[i] = binary.charCodeAt(i);
-              }
-              const pcmData = new Int16Array(bytes.buffer);
-              audioQueueRef.current.push(pcmData);
-              if (!isPlayingRef.current) {
-                playNextChunk();
-              }
-            }
+      recognition.onresult = (event: any) => {
+        if (isMutedRef.current) return;
+        const current = event.resultIndex;
+        const transcript = event.results[current][0].transcript;
+        handleUserSpeech(transcript);
+      };
 
-            // Handle transcriptions
-            if (message.serverContent?.modelTurn?.parts?.[0]?.text) {
-              setTranscription(prev => ({ ...prev, model: message.serverContent?.modelTurn?.parts?.[0]?.text }));
-            }
-
-            if (message.serverContent?.interrupted) {
-              audioQueueRef.current = [];
-              isPlayingRef.current = false;
-            }
-
-            // Handle input/output transcriptions if enabled
-            const inputTranscription = (message as any).serverContent?.inputAudioTranscription?.text;
-            if (inputTranscription) {
-              setTranscription(prev => ({ ...prev, user: inputTranscription }));
-            }
-            
-            const outputTranscription = (message as any).serverContent?.outputAudioTranscription?.text;
-            if (outputTranscription) {
-              setTranscription(prev => ({ ...prev, model: outputTranscription }));
-            }
-          },
-          onclose: () => {
-            stopSession();
-          },
-          onerror: (err) => {
-            console.error("Live API Error:", err);
-            setError("Connection error. Please try again.");
-            stopSession();
-          }
+      recognition.onerror = (event: any) => {
+        console.error("Speech Recognition Error:", event.error);
+        if (event.error === 'not-allowed') {
+          setError("Microphone permission denied. Please allow microphone access.");
+          stopSession();
         }
-      });
+      };
 
-      sessionRef.current = session;
-    } catch (err) {
+      recognition.onend = () => {
+        if (isConnected && !isMutedRef.current && recognitionRef.current) {
+          try {
+            recognition.start();
+          } catch (e) {}
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
       console.error("Failed to start session:", err);
-      setError("Could not access microphone or connect to API.");
+      setError(err.message || "Could not access microphone or initialize live assistant.");
       setIsConnecting(false);
     }
-  };
-
-  const playNextChunk = () => {
-    if (audioQueueRef.current.length === 0 || !audioContextRef.current) {
-      isPlayingRef.current = false;
-      return;
-    }
-
-    isPlayingRef.current = true;
-    const pcmData = audioQueueRef.current.shift()!;
-    const floatData = new Float32Array(pcmData.length);
-    for (let i = 0; i < pcmData.length; i++) {
-      floatData[i] = pcmData[i] / 0x8000;
-    }
-
-    const buffer = audioContextRef.current.createBuffer(1, floatData.length, SAMPLE_RATE);
-    buffer.getChannelData(0).set(floatData);
-
-    const source = audioContextRef.current.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContextRef.current.destination);
-
-    const currentTime = audioContextRef.current.currentTime;
-    const startTime = Math.max(currentTime, nextStartTimeRef.current);
-    
-    source.start(startTime);
-    nextStartTimeRef.current = startTime + buffer.duration;
-
-    source.onended = () => {
-      playNextChunk();
-    };
   };
 
   useEffect(() => {
@@ -202,12 +147,12 @@ export default function LiveAgent({ onClose }: LiveAgentProps) {
         className="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[600px]"
       >
         {/* Header */}
-        <div className="p-6 border-bottom border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+        <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
           <div className="flex items-center gap-3">
             <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-zinc-600'}`} />
             <h2 className="text-xl font-semibold text-white flex items-center gap-2">
               <Bot className="w-5 h-5 text-indigo-400" />
-              Gemini Live
+              Gemini Live Voice Consultant
             </h2>
           </div>
           <button 
@@ -239,7 +184,7 @@ export default function LiveAgent({ onClose }: LiveAgentProps) {
                 </div>
                 <h3 className="text-2xl font-bold text-white mb-2">Ready to talk?</h3>
                 <p className="text-zinc-400 mb-8 max-w-xs mx-auto">
-                  Experience real-time, low-latency voice conversation with Gemini 3.1 Flash.
+                  Experience real-time interactive voice conversation with Gemini for Bangladesh Tax & VAT.
                 </p>
                 <button
                   onClick={startSession}
@@ -258,7 +203,7 @@ export default function LiveAgent({ onClose }: LiveAgentProps) {
               >
                 <Loader2 className="w-16 h-16 text-indigo-500 animate-spin mx-auto mb-6" />
                 <h3 className="text-xl font-medium text-white">Connecting to Gemini...</h3>
-                <p className="text-zinc-500 mt-2">Setting up secure audio channel</p>
+                <p className="text-zinc-500 mt-2">Setting up voice channel</p>
               </motion.div>
             ) : (
               <motion.div 
@@ -274,7 +219,7 @@ export default function LiveAgent({ onClose }: LiveAgentProps) {
                     <motion.div
                       key={i}
                       animate={{ 
-                        height: isMuted ? 4 : Math.max(4, volume * 200 * (0.5 + Math.random() * 0.5)) 
+                        height: isMuted ? 4 : Math.max(4, (volume > 0 ? volume : 0.15) * 120 * (0.5 + Math.random() * 0.5)) 
                       }}
                       className="w-2 bg-indigo-500 rounded-full"
                       transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -351,7 +296,7 @@ export default function LiveAgent({ onClose }: LiveAgentProps) {
         {/* Footer */}
         <div className="p-4 bg-zinc-950/50 text-center">
           <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
-            Powered by Gemini 3.1 Flash Live API
+            Powered by Gemini 3.8 Flash
           </p>
         </div>
       </motion.div>

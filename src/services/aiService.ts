@@ -1,6 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+import { parseRobustJson } from '../utils/robustJsonParser';
 
 export interface TaxUpdate {
   id: string;
@@ -17,30 +15,38 @@ export const generateLawUpdates = async (language: 'en' | 'bn'): Promise<TaxUpda
   Language: ${language === 'bn' ? 'Bengali (Bangla)' : 'English'}.
   Return as a JSON array of objects with id, title, content, date (YYYY-MM-DD), type ('tax' or 'vat'), and impact ('low', 'medium', or 'high').`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: [{ parts: [{ text: prompt }] }],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            title: { type: Type.STRING },
-            content: { type: Type.STRING },
-            date: { type: Type.STRING },
-            type: { type: Type.STRING, enum: ['tax', 'vat'] },
-            impact: { type: Type.STRING, enum: ['low', 'medium', 'high'] }
-          },
-          required: ['id', 'title', 'content', 'date', 'type', 'impact']
+  try {
+    const res = await fetch('/api/gemini/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              title: { type: "string" },
+              content: { type: "string" },
+              date: { type: "string" },
+              type: { type: "string", enum: ['tax', 'vat'] },
+              impact: { type: "string", enum: ['low', 'medium', 'high'] }
+            },
+            required: ['id', 'title', 'content', 'date', 'type', 'impact']
+          }
         }
-      }
-    }
-  });
+      })
+    });
 
-  return JSON.parse(response.text || '[]');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return parseRobustJson<TaxUpdate[]>(data.text || '[]', []);
+  } catch (err) {
+    console.error("Failed to generate law updates:", err);
+    return [];
+  }
 };
 
 export const generateSocialPost = async (update: TaxUpdate, platform: 'facebook' | 'linkedin' | 'twitter' | 'tiktok' | 'instagram' | 'threads'): Promise<string> => {
@@ -53,10 +59,17 @@ export const generateSocialPost = async (update: TaxUpdate, platform: 'facebook'
   ${platform === 'instagram' ? 'Focus on visual tone and hashtags.' : ''}
   Output ONLY the post text.`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: [{ parts: [{ text: prompt }] }]
-  });
-
-  return response.text || '';
+  try {
+    const res = await fetch('/api/gemini/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.text || '';
+  } catch (err) {
+    console.error("Failed to generate social post:", err);
+    return '';
+  }
 };

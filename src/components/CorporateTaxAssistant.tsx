@@ -21,7 +21,16 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Type } from "@google/genai";
+import { parseRobustJson } from '../utils/robustJsonParser';
+
+const Type = {
+  OBJECT: "OBJECT",
+  STRING: "STRING",
+  NUMBER: "NUMBER",
+  INTEGER: "INTEGER",
+  BOOLEAN: "BOOLEAN",
+  ARRAY: "ARRAY"
+} as const;
 
 interface CorporateTaxData {
   company_name: string;
@@ -132,8 +141,6 @@ export default function CorporateTaxAssistant({ t }: { t: any }) {
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve) => {
         reader.onload = () => {
@@ -145,9 +152,11 @@ export default function CorporateTaxAssistant({ t }: { t: any }) {
 
       const base64Data = await base64Promise;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
+      const ocrResponse = await fetch('/api/gemini/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
           {
             parts: [
               { text: `Extract corporate tax return data from this document for Bangladesh NBR system. 
@@ -166,9 +175,12 @@ export default function CorporateTaxAssistant({ t }: { t: any }) {
           responseMimeType: "application/json",
           responseSchema: CORPORATE_TAX_SCHEMA as any
         }
+        })
       });
 
-      const data = JSON.parse(response.text || '{}') as CorporateTaxData;
+      if (!ocrResponse.ok) throw new Error(`HTTP ${ocrResponse.status}`);
+      const ocrJson = await ocrResponse.json();
+      const data = parseRobustJson<CorporateTaxData>(ocrJson.text || '{}', {} as CorporateTaxData);
       setExtractedData(data);
     } catch (err) {
       console.error("Analysis failed:", err);

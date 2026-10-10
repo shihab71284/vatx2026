@@ -13,15 +13,44 @@ import cookieSession from "cookie-session";
 import dotenv from "dotenv";
 import multer from "multer";
 import fs from "fs";
+import { spawn } from "child_process";
+import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
+
+// Shared Server-Side Gemini Client
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
+
+// Resilient Gemini generateContent with automatic fallback
+async function generateContentWithFallback(params: { contents: any; config?: any }) {
+  const models = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+  let lastError: any = null;
+  for (const model of models) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: params.contents,
+        config: params.config
+      });
+      return response;
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Model ${model} request failed, attempting resilient fallback:`, err.message);
+    }
+  }
+  throw lastError;
+}
 
 // Social Publish Backend Helpers
 async function generateAndPublishSocial(noticeTitle: string, platform: 'facebook' | 'linkedin' | 'twitter' | 'tiktok' | 'instagram' | 'threads') {
   try {
-    const { GoogleGenAI } = await import("@google/genai");
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
     const prompt = `
       You are an expert Tax and VAT consultant in Bangladesh. 
       Generate a professional and engaging social media post for ${platform} in Bengali (and a bit of English) 
@@ -33,7 +62,7 @@ async function generateAndPublishSocial(noticeTitle: string, platform: 'facebook
     `;
     
     const result = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-3.8-flash",
       contents: [{ parts: [{ text: prompt }] }]
     });
     const postContent = result.text || "";
@@ -603,7 +632,8 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
   app.use(cookieSession({
     name: 'session',
     keys: [process.env.SESSION_SECRET || 'vatx-secret'],
@@ -958,6 +988,201 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // Server-Side Gemini OCR Endpoint
+  app.post("/api/gemini/ocr", async (req, res) => {
+    try {
+      const { contents, prompt, images, config } = req.body;
+
+      let contentsPayload: any[] = [];
+      if (Array.isArray(contents) && contents.length > 0) {
+        contentsPayload = contents;
+      } else {
+        if (Array.isArray(images) && images.length > 0) {
+          images.forEach((img: any) => {
+            const rawData = typeof img === 'string' ? img : (img.base64 || img.data || '');
+            const cleanBase64 = rawData.includes(',') ? rawData.split(',')[1] : rawData;
+            const mimeType = (typeof img === 'object' && img.mimeType) ? img.mimeType : 'image/jpeg';
+            contentsPayload.push({
+              inlineData: {
+                mimeType,
+                data: cleanBase64
+              }
+            });
+          });
+        }
+        if (prompt) {
+          contentsPayload.push({ text: prompt });
+        }
+      }
+
+      if (contentsPayload.length === 0) {
+        return res.status(400).json({ error: "Missing contents or prompt for OCR" });
+      }
+
+      const mergedConfig: any = {};
+      if (config && typeof config === 'object') {
+        Object.assign(mergedConfig, config);
+      }
+      if (req.body.responseMimeType) {
+        mergedConfig.responseMimeType = req.body.responseMimeType;
+      }
+      if (req.body.responseSchema) {
+        mergedConfig.responseSchema = req.body.responseSchema;
+      }
+      if (req.body.systemInstruction) {
+        mergedConfig.systemInstruction = req.body.systemInstruction;
+      }
+
+      const response = await generateContentWithFallback({
+        contents: contentsPayload,
+        config: Object.keys(mergedConfig).length > 0 ? mergedConfig : undefined
+      });
+
+      return res.json({ text: response.text || "" });
+    } catch (err: any) {
+      console.error("Gemini OCR error:", err);
+      return res.status(500).json({ error: err.message || "Gemini OCR processing failed" });
+    }
+  });
+
+  // Server-Side Gemini General Generate Endpoint
+  app.post("/api/gemini/generate", async (req, res) => {
+    try {
+      const { prompt, contents, systemInstruction, config, responseMimeType, responseSchema } = req.body;
+      const finalContents = contents || prompt;
+      if (!finalContents) {
+        return res.status(400).json({ error: "Prompt or contents is required" });
+      }
+
+      const mergedConfig: any = {};
+      if (config && typeof config === 'object') Object.assign(mergedConfig, config);
+      if (systemInstruction) mergedConfig.systemInstruction = systemInstruction;
+      if (responseMimeType) mergedConfig.responseMimeType = responseMimeType;
+      if (responseSchema) mergedConfig.responseSchema = responseSchema;
+
+      const response = await generateContentWithFallback({
+        contents: finalContents,
+        config: Object.keys(mergedConfig).length > 0 ? mergedConfig : undefined
+      });
+
+      return res.json({ text: response.text || "" });
+    } catch (err: any) {
+      console.error("Gemini generate error:", err);
+      return res.status(500).json({ error: err.message || "Gemini generation failed" });
+    }
+  });
+
+  // Microsoft MarkItDown Document Conversion Helper
+  function runMarkItDown(payload: { base64?: string; file_path?: string; filename?: string; extension?: string; mime_type?: string }): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const scriptPath = path.join(__dirname, 'scripts', 'markitdown_converter.py');
+      const py = spawn('python3', [scriptPath, '--json']);
+      let stdoutData = '';
+      let stderrData = '';
+
+      py.stdout.on('data', (d) => { stdoutData += d.toString(); });
+      py.stderr.on('data', (d) => { stderrData += d.toString(); });
+
+      py.on('close', (code) => {
+        if (code !== 0 && !stdoutData) {
+          return reject(new Error(`MarkItDown process exited with code ${code}: ${stderrData}`));
+        }
+        try {
+          const result = JSON.parse(stdoutData || '{}');
+          resolve(result);
+        } catch (e: any) {
+          reject(new Error(`Failed to parse MarkItDown output: ${e.message}`));
+        }
+      });
+
+      py.stdin.write(JSON.stringify(payload));
+      py.stdin.end();
+    });
+  }
+
+  // Microsoft MarkItDown Document Conversion & OCR Route
+  app.post("/api/markitdown/convert", async (req, res) => {
+    try {
+      const { base64, fileData, filename, fileName, mimeType, enableAiOcr = true } = req.body;
+      const finalBase64 = base64 || fileData || '';
+      const finalFilename = filename || fileName || 'document.pdf';
+      const ext = path.extname(finalFilename) || (mimeType?.includes('pdf') ? '.pdf' : '.png');
+
+      // 1. Run native Microsoft MarkItDown
+      let markitdownRes: any = { success: false, markdown: '' };
+      if (finalBase64) {
+        try {
+          markitdownRes = await runMarkItDown({
+            base64: finalBase64,
+            filename: finalFilename,
+            extension: ext,
+            mime_type: mimeType
+          });
+        } catch (err: any) {
+          console.warn("MarkItDown native convert error, trying fallback:", err.message);
+        }
+      }
+
+      let markdown = (markitdownRes?.markdown || "").trim();
+      let isAiEnhanced = false;
+
+      // 2. If markdown is minimal or lacks structured Markdown tables (e.g. image / scanned PDF / flat PDF text), enhance via Vision OCR
+      const isImage = mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff)$/i.test(finalFilename);
+      const isMinimal = !markdown || markdown.length < 40;
+      const lacksMarkdownTable = !markdown.includes('|');
+
+      if ((isMinimal || ((isImage || lacksMarkdownTable) && enableAiOcr)) && finalBase64) {
+        try {
+          const cleanBase64 = finalBase64.includes(',') ? finalBase64.split(',')[1] : finalBase64;
+          const aiRes = await generateContentWithFallback({
+            contents: [
+              {
+                inlineData: {
+                  mimeType: mimeType || (ext === '.pdf' ? 'application/pdf' : 'image/png'),
+                  data: cleanBase64
+                }
+              },
+              {
+                text: `You are Microsoft MarkItDown OCR Engine. Convert this document/certificate into high-precision, clean GitHub-Flavored Markdown.
+
+CRITICAL EXTRACTION RULES:
+1. ACTUAL AMOUNTS & DATA ONLY: NEVER fabricate, invent, or use placeholder/fictitious numbers, names, or reference codes. Extract ONLY the exact text, dates, reference numbers, and financial amounts that appear physically in this document.
+2. TABLES: Preserve all tables in exact Markdown table syntax (| Col 1 | Col 2 | ... |). Keep the original table columns faithfully.
+3. FOR TAX & SALARY CERTIFICATES / CHALLANS:
+   - Extract the actual depositing employer/bank/authority name.
+   - Extract the actual Challan / Certificate reference number string completely without truncation.
+   - Extract the actual Challan Date (DD-MM-YYYY).
+   - Extract the actual Total Challan / Deposited Amount.
+   - Extract the actual Claimed TDS Amount relating to the employee.
+   - Preserve all individual rows or months that are actually listed in the document. Do not fabricate rows that do not exist.
+4. TAXPAYER IDENTITY: Extract the actual Taxpayer Name, e-TIN (12-digit), Employee ID, Designation, Assessment Year, and Income Year if present.
+5. Output ONLY the clean markdown representation of the document.`
+              }
+            ]
+          });
+
+          if (aiRes.text) {
+            markdown = aiRes.text;
+            isAiEnhanced = true;
+          }
+        } catch (aiErr: any) {
+          console.warn("MarkItDown Vision OCR enhancement failed:", aiErr.message);
+        }
+      }
+
+      return res.json({
+        success: true,
+        markdown: markdown || "# Converted Document\n\nNo text could be extracted.",
+        filename: finalFilename,
+        engine: isAiEnhanced ? "Microsoft MarkItDown + AI Vision OCR" : "Microsoft MarkItDown Core",
+        charCount: markdown.length
+      });
+    } catch (err: any) {
+      console.error("MarkItDown Convert Route Error:", err);
+      return res.status(500).json({ error: err.message || "MarkItDown document conversion failed" });
+    }
+  });
+
   // Blog Routes
   app.get("/api/blog", (req, res) => {
     const posts = db.prepare("SELECT * FROM blog_posts ORDER BY createdAt DESC").all();
@@ -1140,10 +1365,8 @@ async function startServer() {
     if (notice.summary) return res.json({ summary: notice.summary });
 
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.8-flash",
         contents: `Analyze this Bangladesh Tax/VAT notice title and explain its likely impact on taxpayers or businesses in 2-3 concise bullet points. 
         Notice Title: ${notice.title}
         Category: ${notice.category}`,
@@ -1192,10 +1415,8 @@ async function startServer() {
     if (!query) return res.status(400).json({ error: "Query is required" });
 
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.8-flash",
         contents: `Search for HS Code and duty rates in Bangladesh for: ${query}. 
         Return the result as a JSON array of objects with the following properties:
         - hsCode: string

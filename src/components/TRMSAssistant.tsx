@@ -17,8 +17,17 @@ import {
   Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Type } from "@google/genai";
+import { parseRobustJson } from '../utils/robustJsonParser';
 import Markdown from 'react-markdown';
+
+const Type = {
+  OBJECT: "OBJECT",
+  STRING: "STRING",
+  NUMBER: "NUMBER",
+  INTEGER: "INTEGER",
+  BOOLEAN: "BOOLEAN",
+  ARRAY: "ARRAY"
+} as const;
 
 interface TRMSData {
   taxpayer_name: string;
@@ -116,8 +125,6 @@ export default function TRMSAssistant() {
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      
       // Convert file to base64
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve) => {
@@ -130,23 +137,28 @@ export default function TRMSAssistant() {
 
       const base64Data = await base64Promise;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            parts: [
-              { text: "Extract tax-related data from this document for Bangladesh NBR TRMS system. Detect both English and Bengali text. Normalize currency to BDT. If data is unclear, set uncertain to true and provide an explanation." },
-              { inlineData: { data: base64Data, mimeType: file.type } }
-            ]
+      const res = await fetch('/api/gemini/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: "Extract tax-related data from this document for Bangladesh NBR TRMS system. Detect both English and Bengali text. Normalize currency to BDT. If data is unclear, set uncertain to true and provide an explanation." },
+                { inlineData: { data: base64Data, mimeType: file.type } }
+              ]
+            }
+          ],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: TRMS_SCHEMA as any
           }
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: TRMS_SCHEMA as any
-        }
+        })
       });
 
-      const data = JSON.parse(response.text || '{}') as TRMSData;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const ocrJson = await res.json();
+      const data = parseRobustJson<TRMSData>(ocrJson.text || '{}', {} as TRMSData);
       setExtractedData(data);
     } catch (err) {
       console.error("Analysis failed:", err);

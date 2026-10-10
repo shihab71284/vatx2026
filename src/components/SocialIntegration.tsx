@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
+import { parseRobustJson } from '../utils/robustJsonParser';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -138,26 +138,20 @@ export default function SocialIntegration() {
     setIsProcessing(true);
     setOcrResult(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      const model = "gemini-3-flash-preview";
-      
-      const response = await ai.models.generateContent({
-        model,
-        contents: [
-          {
-            parts: [
-              { text: "Extract data from this social media message/screenshot. Extract all relevant text and identify key entities (people, organizations, locations, dates, amounts). Look for transaction details, amounts, dates, vendor names, or tax-related info. Return as JSON with fields: rawText (string), entities (array of {name, type, context}), amount (number), date (ISO string), vendor (string), description (string), type (vat/tax/other)." },
-              { inlineData: { mimeType: "image/png", data: base64Image.split(',')[1] } }
-            ]
-          }
-        ],
-        config: {
-          responseMimeType: "application/json"
-        }
+      const res = await fetch('/api/gemini/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: "Extract data from this social media message/screenshot. Extract all relevant text and identify key entities (people, organizations, locations, dates, amounts). Look for transaction details, amounts, dates, vendor names, or tax-related info. Return as JSON with fields: rawText (string), entities (array of {name, type, context}), amount (number), date (ISO string), vendor (string), description (string), type (vat/tax/other).",
+          images: [{ mimeType: "image/png", base64: base64Image.split(',')[1] || base64Image }],
+          config: { responseMimeType: "application/json" }
+        })
       });
 
-      const data = JSON.parse(response.text || '{}');
-      setOcrResult(data);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const parsed = parseRobustJson<any>(data.text || '{}', {});
+      setOcrResult(parsed);
       setLastSource({ type: 'image', value: base64Image });
     } catch (err) {
       console.error("OCR failed", err);
@@ -172,20 +166,19 @@ export default function SocialIntegration() {
     setOcrResult(null);
     setPreviewImage(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      const model = "gemini-3-flash-preview";
-      
-      const response = await ai.models.generateContent({
-        model,
-        contents: `Analyze this social media URL: ${urlInput}. Extract all relevant text and identify key entities (people, organizations, locations, dates, amounts). Look for transaction details, amounts, dates, vendor names, or tax-related info. Return as JSON with fields: rawText (string), entities (array of {name, type, context}), amount (number), date (ISO string), vendor (string), description (string), type (vat/tax/other).`,
-        config: {
-          tools: [{ urlContext: {} }],
+      const res = await fetch('/api/gemini/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Analyze this social media URL: ${urlInput}. Extract all relevant text and identify key entities (people, organizations, locations, dates, amounts). Look for transaction details, amounts, dates, vendor names, or tax-related info. Return as JSON with fields: rawText (string), entities (array of {name, type, context}), amount (number), date (ISO string), vendor (string), description (string), type (vat/tax/other).`,
           responseMimeType: "application/json"
-        }
+        })
       });
 
-      const data = JSON.parse(response.text || '{}');
-      setOcrResult(data);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const parsed = parseRobustJson<any>(data.text || '{}', {});
+      setOcrResult(parsed);
       setLastSource({ type: 'url', value: urlInput });
       setUrlInput('');
     } catch (err) {

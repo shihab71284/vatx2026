@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { 
   Calculator, 
   Calendar,
@@ -57,6 +56,7 @@ import {
   Bell,
   ExternalLink,
   Code,
+  FileCode,
   Github,
   Lock,
   X,
@@ -112,6 +112,10 @@ import DropboxManager from './components/DropboxManager';
 import OdooIntegration from './components/OdooIntegration';
 import ERPNextIntegration from './components/ERPNextIntegration';
 import VatAgentPortal from './components/VatAgentPortal';
+import NBRMarkupScriptHub from './components/NBRMarkupScriptHub';
+import { NBRScriptModal } from './components/NBRScriptModal';
+import { generatePrivateSalaryLedgerScript, generateTRMSScript, generateUniversalETaxScript, formatNBRDate } from './utils/nbrScriptGenerator';
+import { parseRobustJson } from './utils/robustJsonParser';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Markdown from 'react-markdown';
@@ -204,7 +208,7 @@ import TRMSAssistant from './components/TRMSAssistant';
 import CorporateTaxAssistant from './components/CorporateTaxAssistant';
 import NotificationCenter from './components/NotificationCenter';
 
-type Tab = 'dashboard' | 'vat' | 'tax' | 'tariff' | 'manifest' | 'reports' | 'blog' | 'tools' | 'ai' | 'invoice' | 'history' | 'notices' | 'rebate' | 'hscode' | 'subscription' | 'crypto-tax' | 'blockchain-verify' | 'tokenized-cert' | 'tax-advisory' | 'zakat' | 'final-tax' | 'developer' | 'documents' | 'critical-vat' | 'help' | 'social' | 'base' | 'x-scraper' | 'whatsapp' | 'odoo' | 'dropbox' | 'odoo-erp' | 'erpnext' | 'vat-agents' | 'live-agent' | 'donation' | 'vds-tracker' | 'tds-tracker' | 'compliance-calendar' | 'agent-marketplace' | 'challan-verify' | 'mfs-payment' | 'trms-extractor' | 'corporate-tax' | 'ocr-automation' | 'law-updates' | 'vat-ocr' | 'tax-ocr';
+type Tab = 'dashboard' | 'nbr-script-markup' | 'vat' | 'tax' | 'tariff' | 'manifest' | 'reports' | 'blog' | 'tools' | 'ai' | 'invoice' | 'history' | 'notices' | 'rebate' | 'hscode' | 'subscription' | 'crypto-tax' | 'blockchain-verify' | 'tokenized-cert' | 'tax-advisory' | 'zakat' | 'final-tax' | 'developer' | 'documents' | 'critical-vat' | 'help' | 'social' | 'base' | 'x-scraper' | 'whatsapp' | 'odoo' | 'dropbox' | 'odoo-erp' | 'erpnext' | 'vat-agents' | 'live-agent' | 'donation' | 'vds-tracker' | 'tds-tracker' | 'compliance-calendar' | 'agent-marketplace' | 'challan-verify' | 'mfs-payment' | 'trms-extractor' | 'corporate-tax' | 'ocr-automation' | 'law-updates' | 'vat-ocr' | 'tax-ocr';
 
 interface TaxNotice {
   id: number;
@@ -446,6 +450,7 @@ export default function App() {
                     <p className="px-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-4">Overview</p>
                     <div className="space-y-1">
                       <NavItem icon={<BarChart3 size={18} />} label={t.dashboard} active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} />
+                      <NavItem icon={<FileCode size={18} className="text-emerald-500" />} label={t.nbrScriptMarkup || "NBR Script from Markup"} badge="Featured" active={activeTab === 'nbr-script-markup'} onClick={() => { setActiveTab('nbr-script-markup'); setIsMobileMenuOpen(false); }} />
                       <NavItem icon={<FileSearch size={18} />} label={t.documents} badge="Smart" active={activeTab === 'documents'} onClick={() => { setActiveTab('documents'); setIsMobileMenuOpen(false); }} />
                     </div>
                   </div>
@@ -607,6 +612,13 @@ export default function App() {
               label={t.dashboard} 
               active={activeTab === 'dashboard'} 
               onClick={() => setActiveTab('dashboard')} 
+            />
+            <NavItem 
+              icon={<FileCode size={18} className="text-emerald-500" />} 
+              label={t.nbrScriptMarkup || "NBR Script from Markup"} 
+              badge="Featured"
+              active={activeTab === 'nbr-script-markup'} 
+              onClick={() => setActiveTab('nbr-script-markup')} 
             />
             <NavItem 
               icon={<FileSearch size={18} />} 
@@ -1091,6 +1103,7 @@ export default function App() {
             transition={{ duration: 0.2 }}
           >
             {activeTab === 'dashboard' && <Dashboard vatHistory={vatHistory} taxHistory={taxHistory} t={t} notices={notices} language={language} />}
+            {activeTab === 'nbr-script-markup' && <NBRMarkupScriptHub language={language} />}
             {activeTab === 'vat-agents' && <VatAgentPortal />}
             {activeTab === 'vat' && (
               <VATCalculator 
@@ -1305,7 +1318,9 @@ function NavItem({ icon, label, active, onClick, badge }: { icon: React.ReactNod
 
 function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { language: Language, setLanguage: (l: Language) => void, onInvoiceExtracted: (data: any) => void }) {
   const t = translations[language];
-  const [activeSubTab, setActiveSubTab] = useState<'ocr' | 'automation' | 'history'>('ocr');
+  const [activeSubTab, setActiveSubTab] = useState<'ocr' | 'markup-script' | 'automation' | 'history'>('ocr');
+  const [markupEditorText, setMarkupEditorText] = useState<string>('');
+  const [modalCustomData, setModalCustomData] = useState<any>(null);
   const [selectedHistoryEntry, setSelectedHistoryEntry] = useState<any>(null);
   const [files, setFiles] = useState<{ 
     file: File; 
@@ -1318,6 +1333,7 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
   }[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isScriptModalOpen, setIsScriptModalOpen] = useState(false);
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -1399,8 +1415,6 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
         return next;
       });
 
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      
       setFiles(prev => {
         const next = [...prev];
         next[index].progress = 60;
@@ -1408,95 +1422,119 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
         return next;
       });
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            inlineData: {
-              mimeType: fileData.file.type,
-              data: base64
-            }
-          },
-          {
-            text: `Extract structured data from this document for Bangladesh Tax (NBR) filing. 
-            Focus on the standard NBR templates (e.g., Mushak 6.3, IT-11GA).
-            
-            CRITICAL: PRESERVE TEMPLATE FORMAT. Map the extracted values strictly to the standard field labels expected for these official NBR documents. Do not invent new labels or merge fields unnecessarily.
-            
-            Focus on: 
-            1. Document Type (Invoice, Mushak 6.3, Salary Certificate, Bank Statement, Tax Certificate, TDS Certificate)
-            2. TIN/BIN numbers
-            3. Total Amount (BDT)
-            4. Tax/VAT Amount
-            5. Date of Issue
-            6. Vendor/Company Name (Depositing Authority)
-            7. Address
-            8. Taxpayer Name
-            9. Assessment Year
-            10. Income Components (Salary, House Rent, Business)
-            11. Investment Amount (for rebate)
-            12. Relevant Entities (Extracted names of people, organizations, locations, or other key entities mentioned in the document)
-            13. Table of Deposits/Challans (if present):
-                - Month
-                - Claimed Amount (Tax relating to this certificate)
-                - Challan Amount (Total amount in challan)
-                - Challan No
-                - Date
-            
-            Return the data in a clean JSON format suitable for individual tax return (IT-11GA) and Source Tax Ledger (ledger.etaxnbr.gov.bd) automation.`
-          }
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "object",
-            properties: {
-              documentType: { type: "string" },
-              taxpayerName: { type: "string" },
-              vendorName: { type: "string" },
-              tin: { type: "string" },
-              bin: { type: "string" },
-              date: { type: "string" },
-              assessmentYear: { type: "string" },
-              totalAmount: { type: "number" },
-              taxAmount: { type: "number" },
-              salaryIncome: { type: "number" },
-              housePropertyIncome: { type: "number" },
-              businessIncome: { type: "number" },
-              investmentAmount: { type: "number" },
-              currency: { type: "string" },
-              summary: { type: "string" },
-              confidence: { type: "number" },
-              entities: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    type: { type: "string" },
-                    relevance: { type: "string" }
-                  },
-                  required: ["name", "type"]
-                }
-              },
-              challans: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    month: { type: "string" },
-                    claimedAmount: { type: "number" },
-                    challanAmount: { type: "number" },
-                    challanNo: { type: "string" },
-                    date: { type: "string" }
-                  }
-                }
+      const ocrRes = await fetch('/api/gemini/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              inlineData: {
+                mimeType: fileData.file.type,
+                data: base64
               }
             },
-            required: ["documentType"]
+            {
+              text: `Extract structured data from this document for Bangladesh Tax (NBR) filing.
+            Special focus on the NBR Source Tax Private Salary Ledger (ledger.etaxnbr.gov.bd/#/pages/source-tax/private-salary), Salary Certificate u/s 86, IT-11GA, and TRMS automation.
+            
+            CRITICAL RULES - ZERO HALLUCINATION & ACTUAL VALUES ONLY:
+            - NEVER invent or use sample/placeholder numbers, dates, or company names.
+            - Extract ONLY the genuine text, reference numbers, and financial amounts printed in this specific document.
+            - DO NOT output fictitious amounts or previously seen sample numbers (like 15000, 27650502, 4131, etc.). Read the actual pixels and digits printed on this specific page.
+            - Extract the exact numerical amounts that actually appear in the document for Challan Total and Claimed TDS. If an amount is 4,500, extract 4500. Extract authentic values with 100% precision.
+            
+            EXTRACT ALL NBR PRIVATE SALARY 7 FORM COLUMNS WITH 100% FAITHFULNESS:
+            1. Depositing Authority (Employer / Company / Bank name deducting tax)
+            2. Payment Document Type ("Challan", "Certificate", "e-Challan", or "Pay Order")
+            3. Challan/ Certificate Reference No. (Extract the FULL reference number without truncating)
+            4. Challan/ Certificate Date (Formatted as DD-MM-YYYY)
+            5. Challan/ Certificate Amount (Total Deposited Challan Amount in BDT)
+            6. Claimed Amount (Specific Tax Deducted at Source TDS relating to this employee/taxpayer)
+            7. Taxpayer Name & Employee TIN (12-digit e-TIN)
+            8. Assessment Year & Financial Year
+            9. Multi-month Table of Challans / Monthly Deductions (if document contains multiple salary deductions or monthly rows):
+                - sl (1, 2, 3...)
+                - month (e.g. "Jul 2025", "Aug 2025")
+                - depositingAuthority
+                - paymentDocType ("Challan" or "Certificate")
+                - challanRefNo (Full Challan Reference Number)
+                - challanDate (Formatted as DD-MM-YYYY)
+                - challanAmount (Total challan amount)
+                - claimedAmount (Claimed employee TDS amount)
+
+            Return the data in a clean JSON format matching these exact fields.`
+            }
+          ],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "object",
+              properties: {
+                documentType: { type: "string" },
+                taxpayerName: { type: "string" },
+                vendorName: { type: "string" },
+                depositingAuthority: { type: "string" },
+                paymentDocType: { type: "string" },
+                challanRefNo: { type: "string" },
+                challanDate: { type: "string" },
+                challanAmount: { type: "number" },
+                claimedAmount: { type: "number" },
+                tin: { type: "string" },
+                bin: { type: "string" },
+                date: { type: "string" },
+                assessmentYear: { type: "string" },
+                totalAmount: { type: "number" },
+                taxAmount: { type: "number" },
+                salaryIncome: { type: "number" },
+                housePropertyIncome: { type: "number" },
+                businessIncome: { type: "number" },
+                investmentAmount: { type: "number" },
+                currency: { type: "string" },
+                summary: { type: "string" },
+                confidence: { type: "number" },
+                entities: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      type: { type: "string" },
+                      relevance: { type: "string" }
+                    },
+                    required: ["name", "type"]
+                  }
+                },
+                challans: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      sl: { type: "number" },
+                      month: { type: "string" },
+                      depositingAuthority: { type: "string" },
+                      paymentDocType: { type: "string" },
+                      challanRefNo: { type: "string" },
+                      challanDate: { type: "string" },
+                      claimedAmount: { type: "number" },
+                      challanAmount: { type: "number" },
+                      challanNo: { type: "string" },
+                      date: { type: "string" }
+                    }
+                  }
+                }
+              },
+              required: ["documentType"]
+            }
           }
-        }
+        })
       });
+
+      if (!ocrRes.ok) {
+        const errJson = await ocrRes.json().catch(() => ({}));
+        throw new Error(errJson.error || `Server OCR returned HTTP ${ocrRes.status}`);
+      }
+
+      const ocrResultData = await ocrRes.json();
 
       setFiles(prev => {
         const next = [...prev];
@@ -1505,13 +1543,57 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
         return next;
       });
 
-      const structuredData = JSON.parse(response.text || "{}");
+      const structuredData = parseRobustJson<any>(ocrResultData.text || "{}", {});
+
+      // Normalize structured data to ensure authentic extracted values are preserved
+      const actualAuthority = String(structuredData.depositingAuthority || structuredData.vendorName || '').trim();
+      const actualDocType = structuredData.paymentDocType || 'Challan';
+      const actualRefNo = String(structuredData.challanRefNo || structuredData.challanNo || '').trim();
+      const actualDate = formatNBRDate(structuredData.challanDate || structuredData.date) || '';
+      const actualChallanAmt = Number(structuredData.challanAmount !== undefined ? structuredData.challanAmount : (structuredData.totalAmount || 0));
+      const actualClaimedAmt = Number(structuredData.claimedAmount !== undefined ? structuredData.claimedAmount : (structuredData.taxAmount || 0));
+
+      structuredData.depositingAuthority = actualAuthority;
+      structuredData.paymentDocType = actualDocType;
+      structuredData.challanRefNo = actualRefNo;
+      structuredData.challanDate = actualDate;
+      structuredData.challanAmount = actualChallanAmt;
+      structuredData.claimedAmount = actualClaimedAmt;
+
+      if (!structuredData.challans || structuredData.challans.length === 0) {
+        if (actualRefNo || actualChallanAmt > 0 || actualClaimedAmt > 0) {
+          structuredData.challans = [{
+            sl: 1,
+            month: structuredData.month || 'Jul',
+            depositingAuthority: actualAuthority,
+            paymentDocType: actualDocType,
+            challanRefNo: actualRefNo,
+            challanDate: actualDate,
+            challanAmount: actualChallanAmt,
+            claimedAmount: actualClaimedAmt
+          }];
+        } else {
+          structuredData.challans = [];
+        }
+      } else {
+        structuredData.challans = structuredData.challans.map((c: any, i: number) => ({
+          sl: c.sl || i + 1,
+          month: c.month || `Period ${i + 1}`,
+          depositingAuthority: String(c.depositingAuthority || actualAuthority).trim(),
+          paymentDocType: c.paymentDocType || actualDocType,
+          challanRefNo: String(c.challanRefNo || c.challanNo || actualRefNo).trim(),
+          challanDate: formatNBRDate(c.challanDate || c.date || actualDate),
+          challanAmount: c.challanAmount !== undefined ? Number(c.challanAmount) : actualChallanAmt,
+          claimedAmount: c.claimedAmount !== undefined ? Number(c.claimedAmount) : actualClaimedAmt
+        }));
+      }
+
       setFiles(prev => {
         const next = [...prev];
         next[index].status = 'done';
         next[index].progress = 100;
         next[index].structuredData = structuredData;
-        next[index].ocrResult = response.text;
+        next[index].ocrResult = ocrResultData.text;
         return next;
       });
     } catch (err) {
@@ -1526,155 +1608,11 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
 
   const generateNBRScript = (data: any) => {
     if (!data) return "";
-    
-    // Check if it's a Salary Ledger automation request
     const isSalaryLedger = data.challans && data.challans.length > 0;
-    
     if (isSalaryLedger) {
-      return `
-/**
- * VATX.BD - NBR Salary Ledger Auto-Fill Helper
- * Target: https://ledger.etaxnbr.gov.bd/#/pages/source-tax/private-salary
- */
-(function() {
-  const data = ${JSON.stringify(data, null, 2)};
-  const challans = data.challans;
-  let currentIndex = 0;
-  
-  console.log("%c VATX.BD Salary Ledger Automation Active ", "background: #10b981; color: white; font-weight: bold; padding: 4px;");
-
-  // Create UI
-  const container = document.createElement('div');
-  container.id = 'vatx-helper';
-  Object.assign(container.style, {
-    position: 'fixed',
-    bottom: '20px',
-    right: '20px',
-    zIndex: '9999',
-    background: '#ffffff',
-    padding: '20px',
-    borderRadius: '16px',
-    boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-    border: '1px solid #e5e7eb',
-    fontFamily: 'sans-serif',
-    width: '300px'
-  });
-
-  const render = () => {
-    const c = challans[currentIndex];
-    container.innerHTML = \`
-      <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-weight: 800; font-size: 14px; color: #111827;">VATX.BD Helper</span>
-        <span style="font-size: 10px; color: #6b7280; font-weight: bold;">\${currentIndex + 1} / \${challans.length}</span>
-      </div>
-      <div style="background: #f9fafb; padding: 12px; border-radius: 12px; margin-bottom: 16px; border: 1px solid #f3f4f6;">
-        <div style="font-size: 12px; font-weight: 800; color: #10b981;">\${c.month}</div>
-        <div style="font-size: 10px; color: #6b7280; margin-top: 4px;">Challan: \${c.challanNo}</div>
-        <div style="font-size: 10px; color: #6b7280;">Amount: ৳\${c.claimedAmount}</div>
-      </div>
-      <div style="display: flex; gap: 8px;">
-        <button id="vatx-prev" style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; cursor: pointer; font-size: 12px;">Prev</button>
-        <button id="vatx-fill" style="flex: 2; padding: 8px; border-radius: 8px; border: none; background: #10b981; color: white; cursor: pointer; font-weight: bold; font-size: 12px;">Fill Form</button>
-        <button id="vatx-next" style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; cursor: pointer; font-size: 12px;">Next</button>
-      </div>
-      <button id="vatx-close" style="width: 100%; margin-top: 8px; padding: 4px; background: transparent; border: none; color: #9ca3af; font-size: 10px; cursor: pointer;">Close Helper</button>
-    \`;
-
-    document.getElementById('vatx-prev').onclick = () => { if(currentIndex > 0) { currentIndex--; render(); } };
-    document.getElementById('vatx-next').onclick = () => { if(currentIndex < challans.length - 1) { currentIndex++; render(); } };
-    document.getElementById('vatx-close').onclick = () => container.remove();
-    document.getElementById('vatx-fill').onclick = () => {
-      const fillInput = (placeholder, value) => {
-        const inputs = Array.from(document.querySelectorAll('input'));
-        const input = inputs.find(i => i.placeholder && i.placeholder.toLowerCase().includes(placeholder.toLowerCase()));
-        if (input) {
-          input.value = value;
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-          return true;
-        }
-        return false;
-      };
-
-      fillInput("Depositing Authority", data.vendorName || "");
-      fillInput("Reference No.", data.tin || "");
-      fillInput("Challan No.", c.challanNo || "");
-      fillInput("Challan Amount", c.challanAmount || "");
-      fillInput("Claimed Amount", c.claimedAmount || "");
-      
-      const dateInputs = Array.from(document.querySelectorAll('input[placeholder="Enter Date"]'));
-      if (dateInputs[0]) { dateInputs[0].value = c.date || ""; dateInputs[0].dispatchEvent(new Event('input', { bubbles: true })); }
-      if (dateInputs[1]) { dateInputs[1].value = c.date || ""; dateInputs[1].dispatchEvent(new Event('input', { bubbles: true })); }
-      
-      console.log("Filled data for " + c.month);
-    };
-  };
-
-  document.body.appendChild(container);
-  render();
-})();
-      `.trim();
+      return generatePrivateSalaryLedgerScript(data);
     }
-
-    return `
-/**
- * VATX.BD - NBR TRMS Individual Tax Auto-Fill
- * Target: https://trms.nbr.gov.bd/dashboard
- * 
- * This script automates the entry of data extracted from your documents
- * into the NBR Individual Tax Filing portal.
- */
-(function() {
-  const data = ${JSON.stringify(data, null, 2)};
-  console.log("%c VATX.BD Automation Active ", "background: #10b981; color: white; font-weight: bold; padding: 4px; border-radius: 4px;");
-  console.log("Processing Document Type:", data.documentType);
-  
-  const selectors = {
-    tin: ['input[name="tin"]', '#tin', '.tin-input'],
-    name: ['input[name="name"]', '#taxpayer_name', '.name-input'],
-    assessmentYear: ['select[name="assessment_year"]', 'input[name="assessment_year"]'],
-    salary: ['input[name="salary_income"]', 'input[name="income_salary"]', '#salary'],
-    houseProperty: ['input[name="house_property_income"]', '#house_property'],
-    business: ['input[name="business_income"]', '#business_income'],
-    investment: ['input[name="investment_rebate"]', '#investment'],
-    taxPaid: ['input[name="tax_paid"]', '#tax_paid'],
-    amount: ['input[name="amount"]', 'input[name="total_amount"]', '#amount']
-  };
-
-  const fill = (key, value) => {
-    if (!value) return;
-    const possibleSelectors = selectors[key] || [];
-    let found = false;
-    
-    for (const selector of possibleSelectors) {
-      const el = document.querySelector(selector);
-      if (el) {
-        el.value = value;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-        console.log("%c Filled " + key + " -> " + value, "color: #10b981");
-        found = true;
-        break;
-      }
-    }
-    if (!found) console.warn("Could not find input for: " + key);
-  };
-
-  // Execute Auto-Fill
-  fill('tin', data.tin);
-  fill('name', data.taxpayerName);
-  fill('assessmentYear', data.assessmentYear);
-  fill('salary', data.salaryIncome);
-  fill('houseProperty', data.housePropertyIncome);
-  fill('business', data.businessIncome);
-  fill('investment', data.investmentAmount);
-  fill('taxPaid', data.taxAmount);
-  fill('amount', data.totalAmount);
-  
-  console.log("%c Auto-Fill Complete! Please verify all fields before submitting. ", "font-weight: bold; color: #10b981;");
-  alert("VATX.BD: Data for " + data.documentType + " has been auto-filled. Please verify before submission.");
-})();
-    `.trim();
+    return generateTRMSScript(data);
   };
 
   const activeFile = activeFileIndex !== null ? files[activeFileIndex] : null;
@@ -1682,14 +1620,14 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center mb-8">
-        <div className="flex bg-zinc-100 p-1.5 rounded-2xl w-fit">
+        <div className="flex bg-zinc-100 p-1.5 rounded-2xl w-fit flex-wrap gap-1">
           <button
             onClick={() => {
               setSelectedHistoryEntry(null);
               setActiveSubTab('ocr');
             }}
             className={cn(
-              "px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
+              "px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
               activeSubTab === 'ocr' ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
             )}
           >
@@ -1699,10 +1637,23 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
           <button
             onClick={() => {
               setSelectedHistoryEntry(null);
+              setActiveSubTab('markup-script');
+            }}
+            className={cn(
+              "px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
+              activeSubTab === 'markup-script' ? "bg-white text-emerald-800 shadow-sm font-black" : "text-zinc-400 hover:text-zinc-600"
+            )}
+          >
+            <FileCode size={18} className={activeSubTab === 'markup-script' ? "text-emerald-600" : ""} />
+            {t.nbrScriptMarkup || (language === 'bn' ? 'মার্কআপ থেকে এনবিআর স্ক্রিপ্ট' : 'NBR Script from Markup')}
+          </button>
+          <button
+            onClick={() => {
+              setSelectedHistoryEntry(null);
               setActiveSubTab('automation');
             }}
             className={cn(
-              "px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
+              "px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
               activeSubTab === 'automation' ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
             )}
           >
@@ -1712,7 +1663,7 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
           <button
             onClick={() => setActiveSubTab('history')}
             className={cn(
-              "px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
+              "px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
               activeSubTab === 'history' ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
             )}
           >
@@ -1742,6 +1693,18 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
           </button>
         </div>
       </div>
+
+      {activeSubTab === 'markup-script' && (
+        <NBRMarkupScriptHub 
+          language={language} 
+          initialMarkup={markupEditorText || (activeFile?.ocrResult || '')}
+          initialData={activeFile?.structuredData}
+          onOpenModal={(data) => {
+            setModalCustomData(data);
+            setIsScriptModalOpen(true);
+          }}
+        />
+      )}
 
       {activeSubTab === 'automation' && (
         <OCRFormAutomation 
@@ -1859,6 +1822,23 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => {
+                      if (activeFile?.ocrResult) {
+                        setMarkupEditorText(activeFile.ocrResult);
+                      }
+                      setActiveSubTab('markup-script');
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95"
+                  >
+                    <FileCode size={14} /> {language === 'bn' ? 'মার্কআপ স্ক্রিপ্ট' : 'Markup Script'}
+                  </button>
+                  <button 
+                    onClick={() => setIsScriptModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-brand-600/20 active:scale-95"
+                  >
+                    <Code size={14} /> {t.openScriptHub || 'Script & Automation Hub'}
+                  </button>
+                  <button 
+                    onClick={() => {
                       const script = generateNBRScript(activeFile.structuredData);
                       copyToClipboard(script);
                     }}
@@ -1950,42 +1930,53 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <DataPoint label={t.docType} value={activeFile.structuredData.documentType} icon={<FileText size={16} />} />
-                    <DataPoint label={t.date} value={activeFile.structuredData.date} icon={<History size={16} />} />
-                    <DataPoint label={t.totalAmount} value={activeFile.structuredData.totalAmount ? `৳${activeFile.structuredData.totalAmount.toLocaleString()}` : undefined} icon={<DollarSign size={16} />} />
+                    <DataPoint label={t.depositingAuthority || "Depositing Authority"} value={activeFile.structuredData.depositingAuthority || activeFile.structuredData.vendorName} icon={<Building2 size={16} />} />
+                    <DataPoint label={t.challanRefNo || "Challan/ Certificate Ref No."} value={activeFile.structuredData.challanRefNo || activeFile.structuredData.challanNo} icon={<Fingerprint size={16} />} />
+                    <DataPoint label={t.challanDate || "Challan/ Certificate Date"} value={activeFile.structuredData.challanDate || activeFile.structuredData.date} icon={<History size={16} />} />
+                    <DataPoint label={t.paymentDocType || "Payment Document Type"} value={activeFile.structuredData.paymentDocType || "Challan"} icon={<FileText size={16} />} />
                     <DataPoint label={t.taxpayerName} value={activeFile.structuredData.taxpayerName} icon={<User size={16} />} />
                     <DataPoint label={t.tinNumber} value={activeFile.structuredData.tin} icon={<Fingerprint size={16} />} />
                     <DataPoint label={t.assessmentYear} value={activeFile.structuredData.assessmentYear} icon={<History size={16} />} />
                     
                     <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-zinc-100">
+                      <DataPoint label={t.challanAmount || "Challan Amount"} value={(activeFile.structuredData.challanAmount || activeFile.structuredData.totalAmount) ? `৳${(activeFile.structuredData.challanAmount || activeFile.structuredData.totalAmount).toLocaleString()}` : undefined} icon={<DollarSign size={16} />} />
+                      <DataPoint label={t.claimedAmount || "Claimed Amount (TDS)"} value={(activeFile.structuredData.claimedAmount || activeFile.structuredData.taxAmount) ? `৳${(activeFile.structuredData.claimedAmount || activeFile.structuredData.taxAmount).toLocaleString()}` : undefined} icon={<ShieldCheck size={16} />} />
                       <DataPoint label={t.salaryIncome} value={activeFile.structuredData.salaryIncome ? `৳${activeFile.structuredData.salaryIncome.toLocaleString()}` : undefined} icon={<Coins size={16} />} />
-                      <DataPoint label={t.investment} value={activeFile.structuredData.investmentAmount ? `৳${activeFile.structuredData.investmentAmount.toLocaleString()}` : undefined} icon={<TrendingUp size={16} />} />
-                      <DataPoint label={t.taxPaid} value={activeFile.structuredData.taxAmount ? `৳${activeFile.structuredData.taxAmount.toLocaleString()}` : undefined} icon={<ShieldCheck size={16} />} />
                     </div>
 
                     {activeFile.structuredData.challans && activeFile.structuredData.challans.length > 0 && (
                       <div className="md:col-span-2 mt-6">
-                        <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                          <Database size={14} /> {t.challanTable}
-                        </h4>
-                        <div className="overflow-x-auto rounded-2xl border border-zinc-100">
-                          <table className="w-full text-left text-xs">
-                            <thead className="bg-zinc-50 font-black text-zinc-500 uppercase tracking-widest">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                            <Database size={14} /> {t.challanTable || "NBR Source Tax Private Salary Table"} ({activeFile.structuredData.challans.length})
+                          </h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200">
+                            7 Columns Formatted
+                          </span>
+                        </div>
+                        <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
+                          <table className="w-full text-left text-xs min-w-[700px]">
+                            <thead className="bg-zinc-50 font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-200">
                               <tr>
-                                <th className="p-3">{t.month}</th>
-                                <th className="p-3">{t.challanNo}</th>
-                                <th className="p-3">{t.date}</th>
-                                <th className="p-3 text-right">{t.claimed}</th>
-                                <th className="p-3 text-right">{t.total}</th>
+                                <th className="p-3 w-12 text-center">{t.sl || "SL."}</th>
+                                <th className="p-3">{t.depositingAuthority || "Depositing Authority"}</th>
+                                <th className="p-3">{t.paymentDocType || "Type"}</th>
+                                <th className="p-3">{t.challanRefNo || "Ref No."}</th>
+                                <th className="p-3">{t.challanDate || "Date"}</th>
+                                <th className="p-3 text-right">{t.challanAmount || "Challan Total"}</th>
+                                <th className="p-3 text-right">{t.claimedAmount || "Claimed (৳)"}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-100">
                               {activeFile.structuredData.challans.map((c: any, idx: number) => (
-                                <tr key={idx} className="hover:bg-zinc-50 transition-all">
-                                  <td className="p-3 font-bold">{c.month}</td>
-                                  <td className="p-3 font-mono text-[10px]">{c.challanNo}</td>
-                                  <td className="p-3">{c.date}</td>
-                                  <td className="p-3 text-right font-bold text-brand-600">৳{c.claimedAmount?.toLocaleString()}</td>
-                                  <td className="p-3 text-right text-zinc-500">৳{c.challanAmount?.toLocaleString()}</td>
+                                <tr key={idx} className="hover:bg-emerald-50/30 transition-all">
+                                  <td className="p-3 text-center font-bold text-zinc-400">{c.sl || idx + 1}</td>
+                                  <td className="p-3 font-bold text-zinc-800">{c.depositingAuthority || activeFile.structuredData.depositingAuthority || activeFile.structuredData.vendorName || '-'}</td>
+                                  <td className="p-3 font-semibold text-zinc-600">{c.paymentDocType || 'Challan'}</td>
+                                  <td className="p-3 font-mono font-bold text-sky-700">{c.challanRefNo || c.challanNo || '-'}</td>
+                                  <td className="p-3 font-mono text-zinc-700">{c.challanDate || c.date || '-'}</td>
+                                  <td className="p-3 text-right text-zinc-600">৳{(c.challanAmount !== undefined ? c.challanAmount : 0).toLocaleString()}</td>
+                                  <td className="p-3 text-right font-black text-emerald-600">৳{(c.claimedAmount !== undefined ? c.claimedAmount : 0).toLocaleString()}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1995,15 +1986,44 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
                     )}
                   </div>
 
-                  <div className="p-6 bg-brand-50 rounded-3xl border border-brand-100">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Zap size={16} className="text-brand-600" />
-                      <span className="text-[10px] font-black text-brand-600 uppercase tracking-widest">Automation Ready</span>
+                  <div className="p-6 bg-brand-50 rounded-3xl border border-brand-100 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Zap size={16} className="text-brand-600" />
+                        <span className="text-[10px] font-black text-brand-600 uppercase tracking-widest">NBR Automation Ready</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-brand-100 text-brand-700 rounded-full">Updated 2026-2027</span>
                     </div>
                     <p className="text-xs text-brand-900 leading-relaxed font-medium">
-                      This data has been formatted for the <strong>NBR Tax Return Management System</strong>. 
-                      You can use the script above to auto-fill the forms at <code>trms.nbr.gov.bd</code>.
+                      This extracted data is formatted for <strong>NBR Source Tax Private Salary Ledger</strong> (<code>ledger.etaxnbr.gov.bd/#/pages/source-tax/private-salary</code>) and <strong>TRMS</strong> (<code>trms.nbr.gov.bd</code>).
                     </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          if (activeFile?.ocrResult) {
+                            setMarkupEditorText(activeFile.ocrResult);
+                          }
+                          setActiveSubTab('markup-script');
+                        }}
+                        className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/10"
+                      >
+                        <FileCode size={14} /> {language === 'bn' ? 'মার্কআপ স্ক্রিপ্ট হাব' : 'Open in Markup Script Part'}
+                      </button>
+                      <button
+                        onClick={() => setIsScriptModalOpen(true)}
+                        className="flex items-center gap-2 px-3.5 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold hover:bg-brand-700 transition-all shadow-md shadow-brand-600/10"
+                      >
+                        <Code size={14} /> Open NBR Script Hub
+                      </button>
+                      <a
+                        href="https://ledger.etaxnbr.gov.bd/#/pages/source-tax/private-salary"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-white text-brand-700 border border-brand-200 rounded-xl text-xs font-bold hover:bg-brand-50 transition-all"
+                      >
+                        <ExternalLink size={13} /> NBR Private Salary Portal
+                      </a>
+                    </div>
                   </div>
 
                   <div className="p-6 bg-white rounded-3xl border border-zinc-100 shadow-sm">
@@ -2086,6 +2106,16 @@ function DocumentCentre({ language, setLanguage, onInvoiceExtracted }: { languag
       </div>
     </>
   )}
+
+  <NBRScriptModal
+    isOpen={isScriptModalOpen}
+    onClose={() => {
+      setIsScriptModalOpen(false);
+      setModalCustomData(null);
+    }}
+    initialData={modalCustomData || activeFile?.structuredData || {}}
+    language={language}
+  />
 </div>
   );
 }
@@ -2876,6 +2906,10 @@ function DeveloperPanel({ notices, setNotices }: { notices: TaxNotice[], setNoti
 function Dashboard({ vatHistory, taxHistory, t, notices, language }: { vatHistory: any[], taxHistory: any[], t: any, notices: any[], language: Language }) {
   const totalVat = vatHistory.reduce((sum, r) => sum + r.vatAmount, 0);
   const totalTax = taxHistory.reduce((sum, r) => sum + r.totalTaxLiability, 0);
+  const [showFullMarkupHub, setShowFullMarkupHub] = useState(true);
+  const [dashboardModalData, setDashboardModalData] = useState<any>(null);
+  const [isDashboardModalOpen, setIsDashboardModalOpen] = useState(false);
+  const isBn = language === 'bn';
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -2923,6 +2957,17 @@ function Dashboard({ vatHistory, taxHistory, t, notices, language }: { vatHistor
             </p>
             <div className="flex flex-wrap justify-center md:justify-start gap-4 pt-4">
               <button 
+                onClick={() => {
+                  setShowFullMarkupHub(true);
+                  const el = document.getElementById('dashboard-prominent-markup-hub');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }} 
+                className="px-8 py-4 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-zinc-950 rounded-2xl font-black text-sm transition-all shadow-xl shadow-emerald-500/30 active:scale-95 flex items-center gap-2.5"
+              >
+                <FileCode size={18} />
+                {isBn ? '★ মার্কআপ থেকে এনবিআর স্ক্রিপ্ট' : '★ NBR Script from Markup'}
+              </button>
+              <button 
                 onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'vat' }))} 
                 className="px-8 py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-2xl font-black text-sm transition-all shadow-xl shadow-brand-500/30 active:scale-95"
               >
@@ -2967,6 +3012,89 @@ function Dashboard({ vatHistory, taxHistory, t, notices, language }: { vatHistor
         </div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full -mr-48 -mt-48 blur-3xl" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-brand-500/5 rounded-full -ml-32 -mb-32 blur-3xl" />
+      </motion.section>
+
+      {/* PROMINENT FEATURE HIGHLIGHT: NBR Script from Markup Text */}
+      <motion.section
+        id="dashboard-prominent-markup-hub"
+        variants={itemVariants}
+        className="relative rounded-[3rem] p-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 shadow-2xl shadow-emerald-500/15"
+      >
+        <div className="rounded-[2.85rem] bg-zinc-50/95 backdrop-blur-xl p-6 md:p-10 space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-emerald-500/15 pb-6">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-emerald-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-md shadow-emerald-600/25">
+                  <Sparkles size={12} />
+                  {isBn ? '★ প্রধান বৈশিষ্ট্য (ফ্ল্যাগশিপ)' : '★ Prominent Feature'}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-200">
+                  <FileCode size={12} />
+                  Microsoft MarkItDown + Zero-Hallucination
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 text-emerald-400 rounded-full text-[10px] font-black uppercase tracking-widest">
+                  7-Column NBR Private Salary Ledger
+                </span>
+              </div>
+              <h3 className="text-2xl md:text-3xl font-black font-display tracking-tight text-zinc-900">
+                {isBn
+                  ? 'মার্কআপ টেক্সট থেকে এনবিআর স্ক্রিপ্ট জেনারেটর (সরাসরি ড্যাশবোর্ডে)'
+                  : 'NBR Script from Markup Text — Flagship Automation'}
+              </h3>
+              <p className="text-xs md:text-sm text-zinc-600 max-w-3xl font-medium">
+                {isBn
+                  ? 'যেকোনো স্যালারি ট্যাক্স সার্টিফিকেট (PDF/Word/Image) বা মার্কডাউন টেবিল থেকে আসল চালান নম্বর, তারিখ এবং টিডিএস অংক এক্সট্র্যাক্ট করে ১-ক্লিকে এনবিআর প্রাইভেট স্যালারি লেজার ও টিআরএমএস পোর্টাল অটো-ফিল স্ক্রিপ্ট তৈরি করুন।'
+                  : 'Paste any Markdown table, OCR markup text, or upload a Salary Tax Certificate (PDF/DOCX/XLSX/Image) to extract authentic Challan numbers, dates, and exact TDS amounts into a 1-click NBR Private Salary Ledger & TRMS browser script.'}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'nbr-script-markup' }))}
+                className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-md active:scale-95"
+              >
+                <ExternalLink size={14} className="text-emerald-400" />
+                {isBn ? 'ফুল-স্ক্রিন মোড' : 'Full-Screen Workspace'}
+              </button>
+              <button
+                onClick={() => setShowFullMarkupHub(!showFullMarkupHub)}
+                className="px-4 py-2.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+              >
+                {showFullMarkupHub ? (
+                  <>
+                    <ChevronUp size={15} />
+                    {isBn ? 'সংক্ষিপ্ত করুন' : 'Minimize'}
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={15} />
+                    {isBn ? 'এখানেই ব্যবহার করুন' : 'Expand Workbench'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {showFullMarkupHub && (
+            <NBRMarkupScriptHub
+              language={language}
+              onOpenModal={(data) => {
+                setDashboardModalData(data);
+                setIsDashboardModalOpen(true);
+              }}
+            />
+          )}
+        </div>
+
+        <NBRScriptModal
+          isOpen={isDashboardModalOpen}
+          onClose={() => {
+            setIsDashboardModalOpen(false);
+            setDashboardModalData(null);
+          }}
+          initialData={dashboardModalData || {}}
+          language={language}
+        />
       </motion.section>
 
       <motion.div variants={containerVariants} className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -5019,11 +5147,11 @@ function AIAssistant() {
     setLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: userMessage,
-        config: {
+      const chatRes = await fetch('/api/gemini/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: userMessage,
           systemInstruction: `You are an expert Tax, VAT, and Customs consultant for Bangladesh. 
           Your goal is to provide concise, actionable, and accurate information based on the National Board of Revenue (NBR) regulations, the Income Tax Act 2023, and the Value Added Tax and Supplementary Duty Act, 2012 (with latest amendments including Finance Act 2024).
           
@@ -5043,11 +5171,13 @@ function AIAssistant() {
           - If a query is about VAT, mention relevant SROs if applicable.
           - If a query is about Customs, mention HS code importance.
           - Always include a disclaimer that for complex legal matters, users should consult a certified professional.
-          - Keep answers concise but comprehensive enough to be actionable.`,
-        },
+          - Keep answers concise but comprehensive enough to be actionable.`
+        })
       });
 
-      const aiText = response.text || "I'm sorry, I couldn't process that request.";
+      if (!chatRes.ok) throw new Error(`HTTP ${chatRes.status}`);
+      const chatData = await chatRes.json();
+      const aiText = chatData.text || "I'm sorry, I couldn't process that request.";
       setMessages(prev => [...prev, { role: 'ai', text: aiText }]);
     } catch (err) {
       console.error(err);
@@ -7560,19 +7690,22 @@ function CryptoTaxAdvisory() {
     setLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [...messages, { role: 'user', text: userMsg }].map(m => ({
-          role: m.role,
-          parts: [{ text: m.text }]
-        })),
-        config: {
+      const advRes = await fetch('/api/gemini/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [...messages, { role: 'user', text: userMsg }].map(m => ({
+            role: m.role,
+            parts: [{ text: m.text }]
+          })),
           systemInstruction: "You are a world-class Web3 and Blockchain Tax Expert with Bloomberg-level insights. Provide detailed, professional advice on crypto taxation, DeFi, NFTs, and cross-border digital asset compliance. Use technical terminology accurately."
-        }
+        })
       });
+
+      if (!advRes.ok) throw new Error(`HTTP ${advRes.status}`);
+      const advData = await advRes.json();
       
-      setMessages(prev => [...prev, { role: 'model', text: response.text || "I apologize, but I couldn't process that request." }]);
+      setMessages(prev => [...prev, { role: 'model', text: advData.text || "I apologize, but I couldn't process that request." }]);
     } catch (err) {
       console.error(err);
       setMessages(prev => [...prev, { role: 'model', text: "Error connecting to the advisory network. Please check your connection." }]);
@@ -8324,10 +8457,11 @@ function IncomeTaxAdvisory() {
   const getAIAdvice = async () => {
     setLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `As a professional tax advisor in Bangladesh, analyze this income profile and provide tax-saving advice and compliance tips. 
+      const res = await fetch('/api/gemini/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `As a professional tax advisor in Bangladesh, analyze this income profile and provide tax-saving advice and compliance tips. 
         Income Details:
         - Salary: ${income.salary} BDT
         - House Property: ${income.houseProperty} BDT
@@ -8336,9 +8470,12 @@ function IncomeTaxAdvisory() {
         - Other: ${income.otherSources} BDT
         - Investments: ${income.investments} BDT
         
-        Provide advice in a structured format with bullet points.`,
+        Provide advice in a structured format with bullet points.`
+        })
       });
-      setAdvice(response.text || 'No advice received.');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setAdvice(data.text || 'No advice received.');
     } catch (err) {
       console.error(err);
       setAdvice('Error fetching advice. Please try again.');
@@ -8355,28 +8492,35 @@ function IncomeTaxAdvisory() {
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64Data = (reader.result as string).split(',')[1];
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: [
-            { text: "Extract income and investment details from this document image. Return a JSON object with keys: salary, houseProperty, business, capitalGains, otherSources, investments. Use 0 if not found." },
-            { inlineData: { mimeType: file.type, data: base64Data } }
-          ],
-        });
+        try {
+          const base64Data = (reader.result as string).split(',')[1];
+          const scanRes = await fetch('/api/gemini/ocr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: "Extract income and investment details from this document image. Return a JSON object with keys: salary, houseProperty, business, capitalGains, otherSources, investments. Use 0 if not found.",
+              images: [{ mimeType: file.type, base64: base64Data }],
+              config: { responseMimeType: "application/json" }
+            })
+          });
 
-        const text = response.text || '{}';
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const extracted = JSON.parse(jsonMatch[0]);
-          setIncome(prev => ({ ...prev, ...extracted }));
+          if (!scanRes.ok) throw new Error(`HTTP ${scanRes.status}`);
+          const scanData = await scanRes.json();
+          const extracted = parseRobustJson<any>(scanData.text || '{}', {});
+          if (extracted && typeof extracted === 'object' && Object.keys(extracted).length > 0) {
+            setIncome(prev => ({ ...prev, ...extracted }));
+          }
+        } catch (scanErr) {
+          console.error(scanErr);
+          alert('OCR failed. Please try manual entry.');
+        } finally {
+          setOcrLoading(false);
         }
       };
       reader.readAsDataURL(file);
     } catch (err) {
       console.error(err);
       alert('OCR failed. Please try manual entry.');
-    } finally {
       setOcrLoading(false);
     }
   };
@@ -8557,12 +8701,11 @@ function FinalTaxCalculator() {
   const getAIAnalysis = async (taxData: any) => {
     setIsAiLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      const model = ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{
-          parts: [{
-            text: `As a Bangladeshi Tax Expert, analyze this tax calculation based on Finance Bill 2026-27 (আয়কর পরিপত্র ২৬-২৭, ও আয়কর নির্দেশিকা ২৬-২৭) and provide advice in Bangla. 
+      const anaRes = await fetch('/api/gemini/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `As a Bangladeshi Tax Expert, analyze this tax calculation based on Finance Bill 2026-27 (আয়কর পরিপত্র ২৬-২৭, ও আয়কর নির্দেশিকা ২৬-২৭) and provide advice in Bangla. 
             Assessment Year: ${inputs.taxYear}
             Detailed Income Breakdown:
             - Salary: ${inputs.salaryIncome} BDT
@@ -8586,11 +8729,12 @@ function FinalTaxCalculator() {
             1. A summary of the tax liability under Finance Bill 26-27.
             2. Suggestions for further tax savings if possible.
             3. Specific compliance notes based on Income Tax Circular 26-27 and Income Tax Act 2023.`
-          }]
-        }]
+        })
       });
-      const response = await model;
-      setAiAnalysis(response.text || '');
+
+      if (!anaRes.ok) throw new Error(`HTTP ${anaRes.status}`);
+      const anaData = await anaRes.json();
+      setAiAnalysis(anaData.text || '');
     } catch (error) {
       console.error("AI Analysis Error:", error);
       setAiAnalysis("দুঃখিত, এই মুহূর্তে এআই বিশ্লেষণ পাওয়া যাচ্ছে না। অনুগ্রহ করে পরে চেষ্টা করুন।");
