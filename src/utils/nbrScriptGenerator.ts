@@ -1032,11 +1032,16 @@ export function generatePrivateSalaryLedgerScript(data: NBRDocumentData): string
 
         <!-- Body -->
         <div style="padding: 14px 16px; max-height: 520px; overflow-y: auto;">
+          <!-- Easy Bangla Tip Banner -->
+          <div style="background: #fef3c7; border: 1px solid #fcd34d; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; font-size: 11px; color: #92400e; font-weight: 700; line-height: 1.4;">
+            💡 <strong>সহজ নির্দেশিকা:</strong> নিচের <strong>"🚀 ১-ক্লিকে সব এন্ট্রি অটো-ফিল"</strong> বাটনে চাপলেই সব মাসের চালান ও টাকার অংক স্বয়ংক্রিয়ভাবে পূরণ হয়ে যাবে!
+          </div>
+
           <!-- 12-Month Selector Bar -->
           <div style="margin-bottom: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-              <span style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase;">Select Month (1 - \${challans.length}):</span>
-              <button id="vatx-add-month-btn" style="padding: 2px 6px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px; font-size: 9px; font-weight: 800; color: #065f46; cursor: pointer;">+ Add Month</button>
+              <span style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase;">Select Month / মাস নির্বাচন (1 - \${challans.length}):</span>
+              <button id="vatx-add-month-btn" style="padding: 2px 6px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px; font-size: 9px; font-weight: 800; color: #065f46; cursor: pointer;">+ নতুন মাস (Add)</button>
             </div>
             <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;">
               \${monthTabsHtml}
@@ -1056,34 +1061,34 @@ export function generatePrivateSalaryLedgerScript(data: NBRDocumentData): string
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
               <div style="grid-column: span 2;">
-                <span style="color: #64748b; font-size: 10px; font-weight: bold;">1. Authority:</span>
+                <span style="color: #64748b; font-size: 10px; font-weight: bold;">1. Authority (কর্তৃপক্ষ):</span>
                 <div style="font-weight: 800; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                   \${c.depositingAuthority || payload.depositingAuthority || 'Not Specified'}
                 </div>
               </div>
 
               <div>
-                <span style="color: #64748b; font-size: 10px; font-weight: bold;">2. Doc Type:</span>
+                <span style="color: #64748b; font-size: 10px; font-weight: bold;">2. Doc Type (ধরন):</span>
                 <div style="font-weight: 800; color: #059669;">\${c.paymentDocType || 'Challan'}</div>
               </div>
 
               <div>
-                <span style="color: #64748b; font-size: 10px; font-weight: bold;">3. Full Ref No:</span>
+                <span style="color: #64748b; font-size: 10px; font-weight: bold;">3. Full Ref No (চালান নং):</span>
                 <div style="font-family: monospace; font-weight: 900; color: #0284c7; word-break: break-all;">\${fullRefNo || '-'}</div>
               </div>
 
               <div>
-                <span style="color: #64748b; font-size: 10px; font-weight: bold;">4. Date:</span>
+                <span style="color: #64748b; font-size: 10px; font-weight: bold;">4. Date (তারিখ):</span>
                 <div style="font-weight: 800; color: #1e293b;">\${c.challanDate || c.date || '-'}</div>
               </div>
 
               <div>
-                <span style="color: #64748b; font-size: 10px; font-weight: bold;">5. Challan Total:</span>
+                <span style="color: #64748b; font-size: 10px; font-weight: bold;">5. Challan Total (মোট):</span>
                 <div style="font-weight: 800; color: #334155;">৳\${Number(c.challanAmount || 0).toLocaleString()}</div>
               </div>
 
               <div style="grid-column: span 2; background: #dcfce7; padding: 6px 10px; border-radius: 8px;">
-                <span style="color: #065f46; font-size: 10px; font-weight: bold;">6. Claimed TDS Amount:</span>
+                <span style="color: #065f46; font-size: 10px; font-weight: bold;">6. Claimed TDS Amount (দাবিকৃত কর):</span>
                 <div style="font-weight: 900; color: #047857; font-size: 13px;">৳\${Number(c.claimedAmount || 0).toLocaleString()}</div>
               </div>
             </div>
@@ -1091,23 +1096,23 @@ export function generatePrivateSalaryLedgerScript(data: NBRDocumentData): string
 
           <!-- 1-Click Copy Chips -->
           <div style="margin-bottom: 10px;">
-            <div style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">Click to Copy Value:</div>
+            <div style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">Click to Copy Value (কপি করতে ক্লিক করুন):</div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-              <button id="vatx-copy-ref" style="padding: 4px 8px; background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer;">📋 Full Ref No</button>
-              <button id="vatx-copy-date" style="padding: 4px 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer;">📅 Date</button>
-              <button id="vatx-copy-auth" style="padding: 4px 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer;">🏢 Authority</button>
-              <button id="vatx-copy-claimed" style="padding: 4px 8px; background: #dcfce7; color: #065f46; border: 1px solid #86efac; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer;">💰 Claimed ৳</button>
-              <button id="vatx-copy-total" style="padding: 4px 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer;">💳 Total ৳</button>
+              <button id="vatx-copy-ref" style="padding: 4px 8px; background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer;">📋 চালান নং (Ref No)</button>
+              <button id="vatx-copy-date" style="padding: 4px 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer;">📅 তারিখ (Date)</button>
+              <button id="vatx-copy-auth" style="padding: 4px 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer;">🏢 কর্তৃপক্ষ</button>
+              <button id="vatx-copy-claimed" style="padding: 4px 8px; background: #dcfce7; color: #065f46; border: 1px solid #86efac; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer;">💰 টিডিএস ৳</button>
+              <button id="vatx-copy-total" style="padding: 4px 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer;">💳 মোট চালান ৳</button>
             </div>
           </div>
 
           <!-- Action Buttons -->
           <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
-            <button id="vatx-fill-active" style="width: 100%; padding: 9px; background: #059669; color: white; border: none; border-radius: 12px; font-size: 13px; font-weight: 900; cursor: pointer; box-shadow: 0 4px 12px rgba(5,150,105,0.25); transition: all 0.2s;">
-              ⚡ Auto-Fill Active Row (SL \${currentIndex + 1}: \${c.month || 'Month'})
+            <button id="vatx-fill-all" style="width: 100%; padding: 10px; background: #059669; color: white; border: none; border-radius: 12px; font-size: 13px; font-weight: 900; cursor: pointer; box-shadow: 0 4px 12px rgba(5,150,105,0.25); transition: all 0.2s;">
+              🚀 ১-ক্লিকে সব এন্ট্রি অটো-ফিল (\${challans.length === 1 ? 'Auto-Fill Record' : 'Auto-Fill ALL ' + challans.length + ' Months'})
             </button>
-            <button id="vatx-fill-all" style="width: 100%; padding: 8px; background: #f0fdf4; color: #065f46; border: 1.5px solid #86efac; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer;">
-              🚀 1-Click Auto-Fill \${challans.length === 1 ? 'Challan Record' : 'ALL ' + challans.length + ' Entries'}
+            <button id="vatx-fill-active" style="width: 100%; padding: 8px; background: #f0fdf4; color: #065f46; border: 1.5px solid #86efac; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer;">
+              ⚡ শুধুমাত্র এই সারিটি পূরণ করুন (SL \${currentIndex + 1}: \${c.month || 'Month'})
             </button>
           </div>
 

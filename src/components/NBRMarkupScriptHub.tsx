@@ -89,6 +89,9 @@ export default function NBRMarkupScriptHub({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [copiedType, setCopiedType] = useState<'script' | 'bookmarklet' | null>(null);
   const [copiedRowIdx, setCopiedRowIdx] = useState<number | null>(null);
+  const [showEasyBanglaGuide, setShowEasyBanglaGuide] = useState<boolean>(true);
+  const [guideMethod, setGuideMethod] = useState<'console' | 'bookmark'>('console');
+  const [copiedAllowPasting, setCopiedAllowPasting] = useState<boolean>(false);
 
   // Sync initial markup or data if passed
   useEffect(() => {
@@ -286,6 +289,17 @@ export default function NBRMarkupScriptHub({
 
           <div className="flex flex-wrap items-center gap-3">
             <button
+              onClick={() => {
+                setShowEasyBanglaGuide(true);
+                const el = document.getElementById('nbr-easy-bangla-guide');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-zinc-950 rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-amber-400/20 active:scale-95"
+            >
+              <HelpCircle size={15} />
+              <span>সহজ বাংলা গাইড (নতুনদের জন্য)</span>
+            </button>
+            <button
               onClick={handleLoadSample}
               className="px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs font-bold transition-all flex items-center gap-2 text-white active:scale-95"
             >
@@ -302,6 +316,274 @@ export default function NBRMarkupScriptHub({
               {isBn ? 'এনবিআর লেজার পোর্টাল' : 'Open NBR Ledger'}
             </a>
           </div>
+        </div>
+      </div>
+
+      {/* BEGINNER-FRIENDLY STEP-BY-STEP BANGLA GUIDE FOR ANY NAIVE USER */}
+      <div
+        id="nbr-easy-bangla-guide"
+        className="rounded-[2.5rem] bg-gradient-to-br from-amber-50 via-orange-50/50 to-emerald-50/40 border-2 border-amber-300/80 shadow-lg overflow-hidden"
+      >
+        <div className="p-6 md:p-8 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-amber-200/80 pb-5">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500 text-white rounded-full text-[11px] font-black tracking-wide">
+                <HelpCircle size={14} />
+                <span>যেকোনো নতুন বা সাধারণ মানুষের জন্য সহজ বাংলা নির্দেশিকা (Zero Technical Knowledge Needed)</span>
+              </div>
+              <h3 className="text-xl md:text-2xl font-black text-zinc-900">
+                কীভাবে এনবিআর (NBR) ওয়েবসাইটে অটো-ফিল স্ক্রিপ্টটি ব্যবহার করবেন? (মাত্র ১ মিনিটে)
+              </h3>
+              <p className="text-xs md:text-sm text-zinc-700 font-medium">
+                আপনি যদি কম্পিউটার বা কোডিং সম্পর্কে একদমই কিছু না জানেন, তবুও নিচের <strong>৫টি সহজ ধাপ</strong> অনুসরণ করে হাতের টাইপিং ছাড়াই ১২ মাসের সব চালান ও ট্যাক্সের হিসাব এনবিআর পোর্টালে বসাতে পারবেন।
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex bg-white p-1 rounded-xl border border-amber-200 shadow-sm">
+                <button
+                  onClick={() => setGuideMethod('console')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                    guideMethod === 'console'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  পদ্ধতি ১: মাউস / F12 (সহজ)
+                </button>
+                <button
+                  onClick={() => setGuideMethod('bookmark')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                    guideMethod === 'bookmark'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  পদ্ধতি ২: বুকমার্ক (F12 ছাড়াই)
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowEasyBanglaGuide(!showEasyBanglaGuide)}
+                className="px-3.5 py-2 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black transition-all"
+              >
+                {showEasyBanglaGuide ? 'গাইড লুকান ▲' : 'গাইড দেখুন ▼'}
+              </button>
+            </div>
+          </div>
+
+          {showEasyBanglaGuide && (
+            <div className="space-y-6">
+              {guideMethod === 'console' ? (
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  {/* ধাপ ১ */}
+                  <div className="p-4 rounded-2xl bg-white border border-amber-200 shadow-sm flex flex-col justify-between space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center shadow-sm">
+                          ১
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md">
+                          Step 1
+                        </span>
+                      </div>
+                      <h4 className="font-black text-sm text-zinc-900">
+                        ১. ফাইল দিন বা টেক্সট পেস্ট করুন
+                      </h4>
+                      <p className="text-xs text-zinc-600 leading-relaxed">
+                        নিচে বাম পাশের বক্সে আপনার অফিসের <strong>ট্যাক্স সার্টিফিকেট (PDF বা ছবি)</strong> আপলোড করুন অথবা টেক্সট পেস্ট করুন। ডানপাশের টেবিলে আপনার চালান নম্বর ও টাকার অংক চলে আসবে।
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleLoadSample}
+                      className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <RefreshCw size={12} />
+                      পরীক্ষা করতে নমুনা লোড করুন
+                    </button>
+                  </div>
+
+                  {/* ধাপ ২ */}
+                  <div className="p-4 rounded-2xl bg-white border border-amber-200 shadow-sm flex flex-col justify-between space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center shadow-sm">
+                          ২
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md">
+                          Step 2
+                        </span>
+                      </div>
+                      <h4 className="font-black text-sm text-zinc-900">
+                        ২. স্ক্রিপ্টটি কপি করুন (১ ক্লিকে)
+                      </h4>
+                      <p className="text-xs text-zinc-600 leading-relaxed">
+                        এই গাইডের নিচে অথবা ঠিক এই কার্ডের নিচের <strong>"স্ক্রিপ্ট কপি করুন"</strong> বাটনে মাত্র ১ বার ক্লিক করুন। আপনার অটো-ফিল কোডটি কম্পিউটারে কপি হয়ে যাবে।
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleCopyScript('script')}
+                      className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                    >
+                      {copiedType === 'script' ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedType === 'script' ? 'কপি সম্পন্ন হয়েছে!' : 'এখান থেকেই স্ক্রিপ্ট কপি করুন'}
+                    </button>
+                  </div>
+
+                  {/* ধাপ ৩ */}
+                  <div className="p-4 rounded-2xl bg-white border border-amber-200 shadow-sm flex flex-col justify-between space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center shadow-sm">
+                          ৩
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md">
+                          Step 3
+                        </span>
+                      </div>
+                      <h4 className="font-black text-sm text-zinc-900">
+                        ৩. এনবিআর পেজে গিয়ে লগইন করুন
+                      </h4>
+                      <p className="text-xs text-zinc-600 leading-relaxed">
+                        এনবিআর ই-ট্যাক্স ওয়েবসাইটে লগইন করে বাম পাশের মেনু থেকে <strong>Source Tax ➔ Private Salary</strong> পেজে যান (যেখানে চালানের ছকটি দেখা যায়)।
+                      </p>
+                    </div>
+                    <a
+                      href={portalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2 px-3 bg-zinc-900 hover:bg-zinc-800 text-emerald-400 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <ExternalLink size={12} />
+                      এনবিআর পেজ খুলুন ↗
+                    </a>
+                  </div>
+
+                  {/* ধাপ ৪ */}
+                  <div className="p-4 rounded-2xl bg-white border border-amber-200 shadow-sm flex flex-col justify-between space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center shadow-sm">
+                          ৪
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md">
+                          Step 4
+                        </span>
+                      </div>
+                      <h4 className="font-black text-sm text-zinc-900">
+                        ৪. Console বক্স খুলুন (খুব সহজ)
+                      </h4>
+                      <div className="text-xs text-zinc-600 leading-relaxed space-y-1.5">
+                        <p>
+                          <strong>মাউস দিয়ে:</strong> এনবিআর পেজের যেকোনো ফাঁকা জায়গায় মাউসের <strong>ডান বাটনে ক্লিক (Right Click)</strong> করে নিচে <strong>Inspect</strong> চাপুন, তারপর উপরে <strong>Console</strong> লেখায় ক্লিক করুন।
+                        </p>
+                        <p>
+                          <strong>অথবা কিবোর্ডে:</strong> <kbd className="px-1.5 py-0.5 bg-zinc-100 border border-zinc-300 rounded font-mono text-[10px]">F12</kbd> বা <kbd className="px-1.5 py-0.5 bg-zinc-100 border border-zinc-300 rounded font-mono text-[10px]">Ctrl+Shift+J</kbd> চাপুন।
+                        </p>
+                      </div>
+                    </div>
+                    <div className="py-1.5 px-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[10px] font-bold text-amber-900 text-center">
+                      মাউস Right-Click ➔ Inspect ➔ Console
+                    </div>
+                  </div>
+
+                  {/* ধাপ ৫ */}
+                  <div className="p-4 rounded-2xl bg-emerald-900 text-white border border-emerald-700 shadow-md flex flex-col justify-between space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="w-8 h-8 rounded-xl bg-emerald-400 text-zinc-950 font-black text-sm flex items-center justify-center shadow-sm">
+                          ৫
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-800 text-emerald-300 rounded-md">
+                          Final Step
+                        </span>
+                      </div>
+                      <h4 className="font-black text-sm text-white">
+                        ৫. পেস্ট (Ctrl+V) করে Enter চাপুন!
+                      </h4>
+                      <p className="text-xs text-emerald-100 leading-relaxed">
+                        Console-এর খালি জায়গায় ক্লিক করে কিবোর্ডে <strong>Ctrl + V</strong> চেপে পেস্ট করুন এবং <strong>Enter</strong> চাপুন। সাথে সাথে পর্দার কোণায় সবুজ বক্স আসবে—সেখানে <strong>"🚀 ১-ক্লিকে সব এন্ট্রি অটো-ফিল"</strong> চাপলেই সব পূরণ হয়ে যাবে!
+                      </p>
+                    </div>
+                    <div className="py-1.5 px-2.5 bg-emerald-800/90 border border-emerald-600 rounded-xl text-[10px] font-black text-emerald-200 text-center">
+                      🎉 ১২ মাসের সব ঘর একা একাই পূরণ হবে!
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* পদ্ধতি ২: বুকমার্কলেট গাইড (F12 ছাড়াই) */
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-5 rounded-2xl bg-white border border-amber-200 shadow-sm space-y-3">
+                    <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center">
+                      ১
+                    </span>
+                    <h4 className="font-black text-sm text-zinc-900">
+                      ১. বুকমার্কলেট কোড কপি করুন
+                    </h4>
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      আপনি যদি F12 বা Console ব্যবহার করতে না চান, তবে নিচের বাটনে ক্লিক করে <strong>বুকমার্কলেট কোডটি</strong> কপি করে নিন।
+                    </p>
+                    <button
+                      onClick={() => handleCopyScript('bookmarklet')}
+                      className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5"
+                    >
+                      {copiedType === 'bookmarklet' ? <Check size={14} /> : <Code size={14} />}
+                      {copiedType === 'bookmarklet' ? 'বুকমার্ক কোড কপি হয়েছে!' : 'বুকমার্কলেট কোড কপি করুন'}
+                    </button>
+                  </div>
+
+                  <div className="p-5 rounded-2xl bg-white border border-amber-200 shadow-sm space-y-3">
+                    <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center">
+                      ২
+                    </span>
+                    <h4 className="font-black text-sm text-zinc-900">
+                      ২. ব্রাউজারে একটি নতুন বুকমার্ক বানান
+                    </h4>
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      ব্রাউজারের উপরের বুকমার্ক বারে (Bookmarks Bar) মাউসের ডান বাটনে ক্লিক করে <strong>Add Page...</strong> বা <strong>Add Bookmark</strong> দিন। Name-এর ঘরে লিখুন <code className="bg-zinc-100 px-1.5 py-0.5 rounded font-bold">NBR Auto Fill</code> এবং <strong>URL</strong>-এর ঘরে কপি করা কোডটি পেস্ট করে Save করুন।
+                    </p>
+                  </div>
+
+                  <div className="p-5 rounded-2xl bg-emerald-900 text-white border border-emerald-700 shadow-sm space-y-3">
+                    <span className="w-8 h-8 rounded-xl bg-emerald-400 text-zinc-950 font-black text-sm flex items-center justify-center">
+                      ৩
+                    </span>
+                    <h4 className="font-black text-sm text-white">
+                      ৩. এনবিআর পেজে গিয়ে বুকমার্কে ১ ক্লিক করুন!
+                    </h4>
+                    <p className="text-xs text-emerald-100 leading-relaxed">
+                      এবার এনবিআর-এর <strong>Private Salary</strong> পেজে যান এবং উপরের বুকমার্ক বার থেকে আপনার বানানো <strong>NBR Auto Fill</strong> বুকমার্কে মাত্র ১টি ক্লিক করুন। সাথে সাথে অটো-ফিল বক্স চালু হয়ে যাবে!
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* নতুনদের জন্য সাধারণ সমস্যা ও সমাধান (Troubleshooting Box) */}
+              <div className="p-4 md:p-5 rounded-2xl bg-white/90 border border-amber-300 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="space-y-1.5 text-xs">
+                  <div className="font-black text-amber-950 flex items-center gap-2 text-sm">
+                    <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                    <span>প্রথমবার পেস্ট করার সময় কি হলুদ রঙের সতর্কবার্তা (Warning: Don't paste code...) দেখাচ্ছে?</span>
+                  </div>
+                  <p className="text-zinc-700 leading-relaxed">
+                    চিন্তার কিছু নেই! গুগল ক্রোম (Chrome) ব্রাউজারে প্রথমবার পেস্ট করার সময় নিরাপত্তার জন্য এটি দেখা যায়। সমাধান অতি সহজ: Console-এ কিবোর্ড দিয়ে ছোট হাতের অক্ষরে টাইপ করুন <code className="px-2 py-0.5 bg-amber-100 text-amber-950 font-mono font-black rounded border border-amber-300">allow pasting</code> এবং <strong>Enter</strong> চাপুন। এরপর আবার <strong>Ctrl + V</strong> চেপে আমাদের স্ক্রিপ্টটি পেস্ট করে <strong>Enter</strong> দিন!
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText('allow pasting');
+                    setCopiedAllowPasting(true);
+                    setTimeout(() => setCopiedAllowPasting(false), 2000);
+                  }}
+                  className="px-4 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 rounded-xl text-xs font-black shrink-0 flex items-center gap-2 transition-all active:scale-95"
+                >
+                  {copiedAllowPasting ? <Check size={14} className="text-emerald-700" /> : <Copy size={14} />}
+                  <span>{copiedAllowPasting ? '"allow pasting" কপি হয়েছে!' : 'কপি করুন: allow pasting'}</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -432,20 +714,17 @@ export default function NBRMarkupScriptHub({
           <div className="neo-card p-6 rounded-[2rem] bg-amber-50/60 border border-amber-200/60 text-amber-950 space-y-3">
             <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-amber-900">
               <HelpCircle size={15} className="text-amber-700" />
-              {isBn ? 'কীভাবে ব্যবহার করবেন' : 'How It Works (3 Fast Steps)'}
+              <span>সংক্ষেপে ৩টি সহজ ধাপ (Quick Summary in Bangla)</span>
             </h4>
-            <ol className="text-xs space-y-2 list-decimal list-inside text-amber-900/90 font-medium">
+            <ol className="text-xs space-y-2 list-decimal list-inside text-amber-900/90 font-medium leading-relaxed">
               <li>
-                <strong>{isBn ? '১. টেক্সট দিন:' : '1. Provide Markup:'}</strong>{' '}
-                {isBn ? 'পিডিএফ আপলোড করুন অথবা টেবিল পেস্ট করুন।' : 'Upload document or paste markdown table.'}
+                <strong>১. ফাইল বা টেক্সট দিন:</strong> আপনার ট্যাক্স সার্টিফিকেট (PDF/ছবি) আপলোড করুন অথবা মার্কডাউন টেবিল পেস্ট করুন।
               </li>
               <li>
-                <strong>{isBn ? '২. যাচাই করুন:' : '2. Verify Table:'}</strong>{' '}
-                {isBn ? 'নিচে এক্সট্র্যাক্ট করা ৭টি কলাম ও আসল টাকার অংক মিলিয়ে নিন।' : 'Check the 7 extracted columns and exact amounts.'}
+                <strong>২. টেবিল মিলিয়ে নিন:</strong> ডানপাশের টেবিলে আপনার চালান নম্বর, তারিখ ও টাকার অংক ঠিক আছে কি না দেখুন।
               </li>
               <li>
-                <strong>{isBn ? '৩. এক ক্লিকে ফিল:' : '3. 1-Click Auto-Fill:'}</strong>{' '}
-                {isBn ? 'স্ক্রিপ্ট কপি করে এনবিআর কনসোলে (F12) পেস্ট করলেই সব রো নিজে নিজে পূরণ হবে।' : 'Copy script, open NBR portal console (F12), paste and press enter!'}
+                <strong>৩. কপি ও পেস্ট (১-ক্লিক অটো-ফিল):</strong> সবুজ বাটনে চাপ দিয়ে স্ক্রিপ্ট কপি করুন, এনবিআর পোর্টালে গিয়ে মাউসের ডান বাটনে ক্লিক করে <strong>Inspect ➔ Console</strong>-এ পেস্ট করে Enter চাপুন!
               </li>
             </ol>
           </div>
@@ -775,24 +1054,30 @@ export default function NBRMarkupScriptHub({
               </div>
             </div>
 
-            {/* Step-by-Step Instructions */}
+            {/* Step-by-Step Instructions in Easy Bangla */}
             <div className="p-4 rounded-2xl bg-zinc-800/60 border border-zinc-700/60 text-xs space-y-2">
-              <p className="font-bold text-zinc-300 flex items-center gap-1.5">
+              <p className="font-bold text-zinc-200 flex items-center gap-1.5">
                 <Terminal size={14} className="text-emerald-400" />
-                {isBn ? 'ব্রাউজারে স্ক্রিপ্ট চালানোর নিয়মাবলী:' : 'How to execute script in NBR portal:'}
+                <span>ব্রাউজারে স্ক্রিপ্ট চালানোর সহজ বাংলা নিয়ম (নতুনদের জন্য):</span>
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px] text-zinc-400">
-                <div className="p-2.5 bg-zinc-900/70 rounded-xl border border-zinc-800">
-                  <span className="font-black text-white block mb-0.5">1. Open NBR Portal</span>
-                  <span>Log in to {targetPortal === 'ledger' ? 'ledger.etaxnbr.gov.bd' : 'trms.nbr.gov.bd'}.</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px] text-zinc-300">
+                <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-1">
+                  <span className="font-black text-emerald-400 block">ধাপ ১: এনবিআর পেজ খুলুন</span>
+                  <span>
+                    <strong className="text-white">{targetPortal === 'ledger' ? 'ledger.etaxnbr.gov.bd' : 'trms.nbr.gov.bd'}</strong>-এ লগইন করে Private Salary পেজে যান।
+                  </span>
                 </div>
-                <div className="p-2.5 bg-zinc-900/70 rounded-xl border border-zinc-800">
-                  <span className="font-black text-white block mb-0.5">2. Press F12</span>
-                  <span>Open developer tools, then switch to the <strong>Console</strong> tab.</span>
+                <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-1">
+                  <span className="font-black text-emerald-400 block">ধাপ ২: Console ওপেন করুন</span>
+                  <span>
+                    মাউসের <strong>Right Click ➔ Inspect ➔ Console</strong> ট্যাবে যান (অথবা কিবোর্ডে <strong>F12</strong> চাপুন)।
+                  </span>
                 </div>
-                <div className="p-2.5 bg-zinc-900/70 rounded-xl border border-zinc-800">
-                  <span className="font-black text-white block mb-0.5">3. Paste & Enter</span>
-                  <span>Paste the script & hit Enter. All rows are populated automatically!</span>
+                <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-1">
+                  <span className="font-black text-emerald-400 block">ধাপ ৩: পেস্ট ও অটো-ফিল!</span>
+                  <span>
+                    কপি করা স্ক্রিপ্টটি <strong>Ctrl + V</strong> দিয়ে পেস্ট করে <strong>Enter</strong> চাপুন। সব ঘর নিজে নিজে পূরণ হবে!
+                  </span>
                 </div>
               </div>
             </div>

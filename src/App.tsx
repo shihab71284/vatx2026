@@ -3050,6 +3050,19 @@ function Dashboard({ vatHistory, taxHistory, t, notices, language }: { vatHistor
 
             <div className="flex flex-wrap items-center gap-3 shrink-0">
               <button
+                onClick={() => {
+                  setShowFullMarkupHub(true);
+                  setTimeout(() => {
+                    const el = document.getElementById('nbr-easy-bangla-guide');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}
+                className="px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-zinc-950 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md active:scale-95"
+              >
+                <HelpCircle size={14} />
+                <span>📖 সহজ বাংলা গাইড (নতুনদের জন্য)</span>
+              </button>
+              <button
                 onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'nbr-script-markup' }))}
                 className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-md active:scale-95"
               >
